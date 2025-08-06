@@ -1,6 +1,6 @@
-# AtScale EKS Blueprint
+# AtScale K8S Blueprints
 
-This repository provides an automated way to create an AWS EKS (Elastic Kubernetes Service) cluster to deploy your application.
+This repository provides an automated way to create Kubernetes clusters using different cloud providers. This blueprint creates an environment with the default configuration to deploy AtScale applications correctly.
 
 ## Prerequisites
 
@@ -28,11 +28,29 @@ Before you begin, ensure you have the following tools installed and configured o
 1. **Clone this repository**
 
    ```sh
-   git clone https://github.com/your-org/atscale-eks-blueprint.git
-   cd atscale-eks-blueprint/environments/aws
+   git clone https://github.com/your-org/atscale-k8s-blueprints.git
+   cd atscale-k8s-blueprints/environments/aws
    ```
 
-2. **Create the EKS Cluster**
+2. **Configure Local Variables**
+   Inside the `main.tf` file in the `environments/aws` directory, configure the required variables under the `locals` block:
+
+   ```hcl
+   environment  = "dev"                # Environment name (dev, staging, prod)
+   vpc_cidr     = "10.20.0.0/22"      # VPC CIDR block for the cluster network
+   region       = "us-west-2"         # AWS region to deploy resources
+   ```
+
+   The above shows the minimum required configuration. Additional variables can be customized:
+
+   - EKS cluster settings (version, instance types, node counts)
+   - RDS database configuration (if enabled)
+   - SSO authentication settings
+   - And more
+
+   See the comments in `main.tf` for all available options and their descriptions.
+
+3. **Create the EKS Cluster**
 
    ```sh
    make create-cluster
@@ -44,7 +62,7 @@ Before you begin, ensure you have the following tools installed and configured o
    - Apply the VPC and EKS modules
    - Output the AWS CLI command needed to access your new cluster
 
-3. **Access your EKS Cluster**
+4. **Access your EKS Cluster**
    After the cluster is created, the output will include a command similar to:
    ```sh
    aws eks update-kubeconfig --region <region> --name <cluster_name>
@@ -73,16 +91,60 @@ Before you begin, ensure you have the following tools installed and configured o
 - Ensure your AWS credentials have sufficient permissions.
 - If you encounter issues, check the AWS Console for resource status or review the Terraform output for errors.
 
-## Support
-
-For questions or support, please contact your AtScale representative or open an issue in this repository.
-
 ## Database Access
 
-This blueprint creates a **private RDS cluster**. As a result, the database is not accessible from the public internet. To connect to the database, clients must use one of the following methods:
+As this is a production-ready setup, the RDS database (if enabled) is deployed as a Multi-AZ cluster with no public internet access. To connect to the database securely, clients must use one of the following methods:
 
-- Connect from within the same VPC (e.g., from an EC2 instance or EKS pod)
-- Use a VPN connection into the VPC
-- Use a bastion host deployed within the same VPC
+- Connect from within the same VPC (e.g., from an EKS pod or EC2 instance)
+- Establish a VPN connection into the VPC
+- Connect through a bastion host deployed within the VPC
+- Use AWS Systems Manager Session Manager for secure shell access
+- **Use a Kubernetes pod as a jump host (proxy) to access RDS from your local machine:**
 
-This ensures that your database remains secure and isolated from external networks.
+### Accessing RDS from Your Local Machine via a Pod
+
+Your RDS cluster is only accessible from within the EKS cluster's VPC. In order to connect to it, you can use a Kubernetes pod as a jump host. There are two main approaches:
+
+#### **A. Exec into the Pod and Use psql**
+
+1. Deploy a database proxy pod:
+   ```sh
+   kubectl run db-proxy --image=postgres:16 --env="PGPASSWORD=$DB_PASSWORD" --command -- sleep infinity
+   ```
+2. Exec into the pod:
+   ```sh
+   kubectl exec -it db-proxy -- bash
+   ```
+3. Connect to your RDS instance from inside the pod:
+   ```sh
+   psql -h <RDS_ENDPOINT> -U <DB_USER> -d <DB_NAME>
+   ```
+   Replace `<RDS_ENDPOINT>`, `<DB_USER>`, and `<DB_NAME>` with your actual RDS details. The password will be taken from the `PGPASSWORD` environment variable.
+
+#### **B. Port-forward for Local or GUI Access**
+
+If you want to use local tools (e.g., DBeaver, DataGrip) or connect from your local machine:
+
+1. Deploy a pod with a TCP proxy (e.g., socat):
+   ```sh
+   kubectl run db-proxy --image=alpine/socat --restart=Never -- \
+     tcp-listen:5432,fork,reuseaddr tcp-connect:<RDS_ENDPOINT>:5432
+   ```
+   Replace `<RDS_ENDPOINT>` with your RDS endpoint.
+2. Port-forward from your local machine to the pod:
+   ```sh
+   kubectl port-forward pod/db-proxy 15432:5432
+   ```
+   This forwards your local port 15432 to the pod's port 5432, which is then proxied to RDS.
+3. Connect from your local machine using your preferred tool:
+   ```sh
+   psql -h localhost -p 15432 -U <DB_USER> -d <DB_NAME>
+   ```
+
+---
+
+The database endpoint and credentials can be retrieved using:
+
+```sh
+terraform output rds_credentials
+```
