@@ -50,6 +50,8 @@ module "eks" {
     for user in var.aws_auth_sso_users : user.arn if user.role == "devops"
   ] : []
 
+  access_entries = local.eks_sso_users
+
   eks_managed_node_groups = {
     workers = {
       vpc_security_group_ids = [aws_security_group.access_sg.id, aws_security_group.eks_efs.id]
