@@ -28,7 +28,7 @@ locals {
   rds_instance_class       = "db.r6gd.xlarge" # Replace with the instance class you want to use, bear in mind that the instance class you choose will affect the cost of the RDS instance
   rds_allocated_storage    = 250              # Replace with the allocated storage you want to use
   rds_engine               = "postgres"       # Replace with the engine you want to use
-  rds_engine_version       = "16.9"           # Replace with the engine version you want to use
+  rds_engine_version       = "16.4"           # Replace with the engine version you want to use
   rds_major_engine_version = "16"             # Replace with the major engine version you want to use
   rds_db_name              = "postgres"       # Replace with the database name you want to use (e.g. postgres)
   rds_username             = "adminuser"      # Replace with the username you want to use (e.g. adminuser)
