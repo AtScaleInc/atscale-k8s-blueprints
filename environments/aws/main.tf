@@ -13,7 +13,7 @@ locals {
   # EKS Variables
   ############################################################################
   k8s_version                        = "1.32"                                               # Replace with the Kubernetes version you want to use
-  eks_instance_types                 = ["m5ad.xlarge"]                                      # Replace with the instance types you want to use, bear in mind that the instance types you choose will affect the cost of the cluster
+  eks_instance_types                 = ["m6a.4xlarge"]                                      # Replace with the instance types you want to use, bear in mind that the instance types you choose will affect the cost of the cluster
   eks_workers_min_instance_count     = 3                                                    # Replace with the minimum number of worker nodes you want to use
   eks_workers_max_instance_count     = 6                                                    # Replace with the maximum number of worker nodes you want to use
   eks_workers_desired_instance_count = 3                                                    # Replace with the desired number of worker nodes you want to use
