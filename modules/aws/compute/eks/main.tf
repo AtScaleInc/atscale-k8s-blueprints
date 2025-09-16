@@ -82,6 +82,14 @@ module "eks" {
       type        = "ingress"
       self        = true
     }
+    metrics_server_allow_from_control_plane = {
+      type                          = "ingress"
+      protocol                      = "tcp"
+      from_port                     = 10251
+      to_port                       = 10251
+      source_cluster_security_group = true
+      description                   = "Allow access from control plane to metrics server webhook"
+    }
     egress_all = {
       description      = "Node all egress"
       protocol         = "-1"
