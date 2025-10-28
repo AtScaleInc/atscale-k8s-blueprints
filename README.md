@@ -92,16 +92,49 @@ This repository provides an automated way to create Kubernetes clusters using di
    cd atscale-k8s-blueprints/environments/azure/atscale-aks
    ```
 
-2. **Run the Bootstrap Script**
-   Before creating the AKS cluster, run the `bootstrap-tf-backend.sh` script to set up the remote state file and backend:
+2. **Customize Bootstrap Variables**
+   Before running the bootstrap script, customize the variables in the `bootstrap-tf-backend.sh` file:
 
    ```sh
    cd bootstrap
+   ```
+
+   Edit the `bootstrap-tf-backend.sh` file and update the following variables at the top of the file:
+
+   ```bash
+   RESOURCE_GROUP_NAME="[YOUR_RESOURCE_GROUP_NAME]"
+   LOCATION="[YOUR_LOCATION]"
+   STORAGE_ACCOUNT_NAME="[YOUR_STORAGE_ACCOUNT_NAME]"
+   CONTAINER_NAME="[YOUR_CONTAINER_NAME]"
+   STATE_FILE_NAME="[YOUR_STATE_FILE_NAME]"
+   SUBSCRIPTION_ID="[YOUR_SUBSCRIPTION_ID]"
+   ```
+
+   Replace the placeholder values with your own:
+
+   - `RESOURCE_GROUP_NAME`: Your Azure resource group name (e.g., "rg-atscale-blueprint")
+   - `LOCATION`: Azure region (e.g., "westus3")
+   - `STORAGE_ACCOUNT_NAME`: Unique storage account name (lowercase, alphanumeric only, e.g., "mystorageaccount123")
+   - `CONTAINER_NAME`: Container name for Terraform state (e.g., "tfstate")
+   - `STATE_FILE_NAME`: State file name (e.g., "terraform.tfstate")
+   - `SUBSCRIPTION_ID`: Your Azure subscription ID
+
+3. **Authenticate with Azure**
+   Authenticate with your Azure account before running the bootstrap script:
+
+   ```sh
+   az login
+   ```
+
+4. **Run the Bootstrap Script**
+   After customizing the variables and authenticating, run the bootstrap script to set up the remote state file and backend:
+
+   ```sh
    ./bootstrap-tf-backend.sh
    cd ..
    ```
 
-3. **Configure Local Variables**
+5. **Configure Local Variables**
    Inside the `main.tf` file in the `environments/azure/atscale-aks` directory, configure the required variables under the `locals` block:
 
    ```hcl
@@ -111,13 +144,13 @@ This repository provides an automated way to create Kubernetes clusters using di
    resource_group_name = "[YOUR_RESOURCE_GROUP_NAME]" # Replace with your resource group name
    ```
 
-4. **Create the AKS Cluster**
+6. **Create the AKS Cluster**
 
    ```sh
    make create-cluster
    ```
 
-5. **Access your AKS Cluster**
+7. **Access your AKS Cluster**
    After the cluster is created, configure your `kubectl` context for the new cluster using Azure CLI.
 
 ### Cleanup
