@@ -1,11 +1,12 @@
 resource "azurerm_postgresql_flexible_server" "this" {
+  count                         = var.enable_postgresql ? 1 : 0
   name                          = var.server_name
   resource_group_name           = var.resource_group_name
   location                      = var.location
   version                       = var.postgresql_version
   sku_name                      = var.sku_name
   administrator_login           = var.administrator_login
-  administrator_password        = random_password.pass.result
+  administrator_password        = random_password.pass[0].result
   zone                          = "1"
   storage_mb                    = var.storage_mb
   backup_retention_days         = var.backup_retention_days
@@ -16,13 +17,14 @@ resource "azurerm_postgresql_flexible_server" "this" {
 }
 
 resource "random_password" "pass" {
+  count   = var.enable_postgresql ? 1 : 0
   length  = 16
   special = false
 }
 
 resource "azurerm_postgresql_flexible_server_configuration" "pgbouncer" {
-
+  count     = var.enable_postgresql ? 1 : 0
   name      = "pgbouncer.enabled"
-  server_id = azurerm_postgresql_flexible_server.this.id
+  server_id = azurerm_postgresql_flexible_server.this[0].id
   value     = "true"
 }

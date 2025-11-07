@@ -4,7 +4,7 @@ set -euo pipefail
 
 # Variables - customize these!
 RESOURCE_GROUP_NAME="[YOUR_RESOURCE_GROUP_NAME]"
-LOCATION="[YOUR_LOCATION]"
+LOCATION="[YOUR_REGION_NAME]"
 STORAGE_ACCOUNT_NAME="[YOUR_STORAGE_ACCOUNT_NAME]"
 CONTAINER_NAME="[YOUR_CONTAINER_NAME]"
 STATE_FILE_NAME="[YOUR_STATE_FILE_NAME]"
@@ -62,7 +62,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "=4.34.0"
+      version = "4.52.0"
     }
   }
 }
