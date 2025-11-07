@@ -58,3 +58,7 @@ variable "private_dns_zone_id" {
   description = "The ID of the private DNS zone"
 }
 
+variable "enable_postgresql" {
+  type        = bool
+  description = "The enable PostgreSQL of the PostgreSQL server"
+}

@@ -1,5 +1,6 @@
 module "aks" {
-  source = "Azure/aks/azurerm//v4"
+  source  = "Azure/aks/azurerm"
+  version = "11.0.0"
 
   location                             = var.location
   prefix                               = var.prefix
