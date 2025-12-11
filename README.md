@@ -161,6 +161,115 @@ This repository provides an automated way to create Kubernetes clusters using di
   ```
   (from the `environments/azure/atscale-aks` directory)
 
+## Google Cloud (GKE)
+
+### Prerequisites
+
+1. **Google Cloud SDK (gcloud CLI)**
+
+   - Used for authentication and cluster access.
+   - Download: https://cloud.google.com/sdk/docs/install
+   - You must have your GCP credentials configured with permissions to create GKE, VPC, and related resources.
+   - Required components:
+     ```sh
+     gcloud components install cloud-sql-proxy
+     ```
+
+2. **Terraform (>= 1.11.0)**
+
+   - Used for infrastructure provisioning.
+   - Download: https://www.terraform.io/downloads
+
+3. **Make**
+   - Used to run the provided Makefile commands.
+   - macOS: Pre-installed.
+   - Windows: Install via [Chocolatey](https://community.chocolatey.org/packages/make) or [GnuWin](http://gnuwin32.sourceforge.net/packages/make.htm).
+   - Linux: Install via your package manager (e.g., `sudo apt-get install make`).
+
+### Setup
+
+1. **Clone this repository**
+
+   ```sh
+   git clone https://github.com/your-org/atscale-k8s-blueprints.git
+   cd atscale-k8s-blueprints/environments/google
+   ```
+
+2. **Customize Bootstrap Variables**
+   Before running the bootstrap script, customize the variables in the `bootstrap-tf-backend.sh` file:
+
+   ```sh
+   cd bootstrap
+   ```
+
+   Edit the `bootstrap-tf-backend.sh` file and update the following variables at the top of the file:
+
+   ```bash
+   PROJECT_ID="[YOUR_PROJECT_ID]"
+   BUCKET_NAME="[YOUR_BUCKET_NAME]"
+   LOCATION="[YOUR_LOCATION]"
+   STATE_FILE_PREFIX="[YOUR_STATE_FILE_PREFIX]"
+   ```
+
+   Replace the placeholder values with your own:
+
+   - `PROJECT_ID`: Your GCP project ID (e.g., "my-project-123")
+   - `BUCKET_NAME`: Unique GCS bucket name for Terraform state (e.g., "my-terraform-state-bucket")
+   - `LOCATION`: GCS bucket location (e.g., "us-central1", "us-east1")
+   - `STATE_FILE_PREFIX`: State file prefix (e.g., "terraform/state")
+
+3. **Authenticate with Google Cloud**
+   Authenticate with your Google Cloud account before running the bootstrap script:
+
+   ```sh
+   gcloud auth login
+   gcloud auth application-default login
+   ```
+
+4. **Run the Bootstrap Script**
+   After customizing the variables and authenticating, run the bootstrap script to set up the remote state file and backend:
+
+   ```sh
+   ./bootstrap-tf-backend.sh
+   cd ..
+   ```
+
+5. **Configure Local Variables**
+   Inside the `main.tf` file in the `environments/google` directory, configure the required variables under the `locals` block:
+
+   ```hcl
+   environment                   = "[YOUR_ENVIRONMENT_NAME]"              # Replace with your environment name
+   project_id                    = "[YOUR_PROJECT_ID]"                    # Replace with your GCP project ID
+   subnet_cidr                   = "[YOUR_SUBNET_CIDR]"                   # Subnet CIDR for GKE nodes (recommended: /20 for 4096 IPs)
+   pods_secondary_range_cidr     = "[YOUR_PODS_SECONDARY_RANGE_CIDR]"    # Pod CIDR range (e.g., 10.1.0.0/16)
+   services_secondary_range_cidr = "[YOUR_SERVICES_SECONDARY_RANGE_CIDR]" # Services CIDR range (e.g., 10.2.0.0/16)
+   region                        = "[YOUR_REGION]"                        # Replace with your region (e.g., us-central1)
+   cluster_name                  = "[YOUR_CLUSTER_NAME]"                  # Replace with your cluster name
+   database_name                 = "[YOUR_DATABASE_NAME]"                 # Database name (if enable_postgres_database = true)
+   database_user                 = "[YOUR_DATABASE_USER]"                 # Database user (if enable_postgres_database = true)
+   ```
+
+6. **Create the GKE Cluster**
+
+   ```sh
+   make create-cluster
+   ```
+
+7. **Access your GKE Cluster**
+   After the cluster is created, the output will include a command similar to:
+   ```sh
+   gcloud container clusters get-credentials <cluster_name> --region <region> --project <project_id>
+   ```
+   Copy and run this command in your terminal to configure your `kubectl` context for the new cluster.
+
+### Cleanup
+
+- To destroy the cluster and all resources, you can run:
+  ```sh
+  terraform destroy
+  ```
+  (from the `environments/azure/atscale-aks` directory)
+
 ## What Gets Created
 
 ### AWS
@@ -176,6 +285,14 @@ This repository provides an automated way to create Kubernetes clusters using di
 - An AKS cluster
 - All necessary Azure roles and security groups
 - Optional: Azure PostgreSQL Flexible Server and other Azure infrastructure as defined in the modules
+
+### Google Cloud (GKE)
+
+- A new VPC (Virtual Private Cloud)
+- A GKE cluster
+- All necessary IAM roles and firewall rules
+- Google Filestore instance for persistent storage
+- Optional: Cloud SQL PostgreSQL instance and other GCP infrastructure as defined in the modules
 
 ## Notes
 
@@ -199,6 +316,16 @@ This repository provides an automated way to create Kubernetes clusters using di
   ```
   (from the `environments/azure/atscale-aks` directory)
 
+### Google Cloud (GKE)
+
+- The process may take several minutes, depending on your GCP region and resource quotas.
+- You can customize the infrastructure by editing the Terraform modules in `modules/gke/`.
+- To destroy the cluster and all resources, you can run:
+  ```sh
+  terraform destroy
+  ```
+  (from the `environments/google` directory)
+
 ## Troubleshooting
 
 ### AWS
@@ -210,6 +337,13 @@ This repository provides an automated way to create Kubernetes clusters using di
 
 - Ensure your Azure credentials have sufficient permissions.
 - If you encounter issues, check the Azure Portal for resource status or review the Terraform output for errors.
+
+### Google Cloud (GKE)
+
+- Ensure your GCP credentials have sufficient permissions.
+- Make sure you have authenticated with both `gcloud auth login` and `gcloud auth application-default login`.
+- If you encounter issues, check the Google Cloud Console for resource status or review the Terraform output for errors.
+- Verify that required APIs are enabled in your GCP project (Compute Engine, Kubernetes Engine, Cloud SQL, etc.).
 
 ## Database Access
 
@@ -230,6 +364,23 @@ This repository provides an automated way to create Kubernetes clusters using di
   - Connect through a bastion host deployed within the VNet
   - Use Azure Bastion for secure shell access
   - **Use a Kubernetes pod as a jump host (proxy) to access PostgreSQL from your local machine:**
+
+### Google Cloud (GKE)
+
+- As this is a production-ready setup, the Cloud SQL PostgreSQL instance (if enabled) is deployed with private IP only and no public internet access. To connect to the database securely, clients must use one of the following methods:
+  - Connect from within the same VPC (e.g., from a GKE pod or Compute Engine instance)
+  - Establish a VPN connection into the VPC
+  - Connect through a bastion host deployed within the VPC
+  - **Use Cloud SQL Proxy from your local machine (recommended):**
+    ```sh
+    cloud-sql-proxy <CONNECTION_NAME> --port=5432
+    ```
+    Then connect using:
+    ```sh
+    psql -h 127.0.0.1 -p 5432 -U <DB_USER> -d <DB_NAME>
+    ```
+    The connection name, user, and password are provided in the Terraform output after running `make create-cluster`.
+  - Use a Kubernetes pod as a jump host (proxy) to access Cloud SQL from your local machine
 
 ### Accessing PostgreSQL from Your Local Machine via a Pod
 
