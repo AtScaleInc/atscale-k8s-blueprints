@@ -73,9 +73,67 @@ gsutil label ch -l "purpose:terraform-state" gs://$BUCKET_NAME
 echo "---------------------------------------------"
 echo "Backend configuration created successfully!"
 echo "---------------------------------------------"
-echo "Use these values in your backend.tf:"
-echo "bucket = \"$BUCKET_NAME\""
-echo "prefix = \"$STATE_FILE_PREFIX\""
+echo "Generating backend.tf file..."
+
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Go up one level to the environment directory
+BACKEND_FILE="${SCRIPT_DIR}/../backend.tf"
+
+# Generate the backend.tf file
+cat <<EOF > "$BACKEND_FILE"
+# Terraform Backend
+################################################################################
+
+terraform {
+  required_version = ">= 1.11.0"
+
+  backend "gcs" {
+    bucket = "$BUCKET_NAME"
+    prefix = "$STATE_FILE_PREFIX"
+  }
+
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "7.10.0"
+    }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = "1.19.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "3.2.4"
+    }
+  }
+}
+
+provider "google" {
+  project = local.project_id
+  region  = local.region
+
+  default_labels = {
+    environment = lower(local.environment)
+    managed_by  = "terraform"
+    project     = "\${lower(local.environment)}-tf"
+  }
+}
+
+provider "kubectl" {
+  host                   = module.gke.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.gke.cluster_ca_certificate)
+  token                  = data.google_client_config.default.access_token
+  load_config_file       = false
+}
+
+EOF
+
+echo "backend.tf file generated successfully at: $BACKEND_FILE"
+echo "---------------------------------------------"
+echo "Configuration details:"
+echo "  bucket = \"$BUCKET_NAME\""
+echo "  prefix = \"$STATE_FILE_PREFIX\""
 echo "---------------------------------------------"
 echo ""
 echo "Note: Make sure you have the following permissions:"
