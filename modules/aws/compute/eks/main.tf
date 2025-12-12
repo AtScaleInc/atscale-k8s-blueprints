@@ -61,6 +61,21 @@ module "eks" {
       max_size               = var.eks_workers_max_instance_count
       desired_size           = var.eks_workers_desired_instance_count
       capacity_type          = var.enable_spot_instances ? "SPOT" : "ON_DEMAND"
+
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 120
+            volume_type           = "gp3"
+            iops                  = 3000
+            throughput            = 125
+            encrypted             = true
+            delete_on_termination = true
+          }
+        }
+      }
+
       update_config = {
         max_unavailable = 1
       }
