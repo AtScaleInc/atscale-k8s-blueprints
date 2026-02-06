@@ -1,6 +1,6 @@
 module "vpc_endpoints" {
   source  = "terraform-aws-modules/vpc/aws//modules/vpc-endpoints"
-  version = "5.21.0"
+  version = "~> 6.5.1"
 
   vpc_id             = module.vpc.vpc_id
   security_group_ids = [aws_security_group.endpoint_sg.id]
