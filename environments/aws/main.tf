@@ -4,20 +4,20 @@ locals {
   ############################################################################
   # General Variables
   ############################################################################
-  environment  = "YOUR-ENVIRONMENT" # Replace with your environment name
-  vpc_cidr     = "YOUR-VPC-CIDR"    # Replace with your VPC CIDR (e.g. 10.84.0.0/22)
-  region       = "YOUR-REGION"      # Replace with your region (e.g. us-east-1)
+  environment  = "[YOUR_ENVIRONMENT_NAME]" # Replace with your environment name
+  vpc_cidr     = "[YOUR_VPC_CIDR]"         # Replace with your VPC CIDR (e.g. 10.84.0.0/22)
+  region       = "[YOUR_REGION]"           # Replace with your region (e.g. us-east-1)
   cluster_name = "${local.environment}-eks"
 
   ############################################################################
   # EKS Variables
   ############################################################################
-  k8s_version                        = "1.32"                                               # Replace with the Kubernetes version you want to use
-  eks_instance_types                 = ["m6a.4xlarge"]                                      # Replace with the instance types you want to use, bear in mind that the instance types you choose will affect the cost of the cluster
+  k8s_version                        = "1.34"                                               # Replace with the Kubernetes version you want to use
+  eks_instance_types                 = ["m6a.4xlarge", "m6i.4xlarge", "m5.4xlarge"]         # Replace with the instance types you want to use, bear in mind that the instance types you choose will affect the cost of the cluster
   eks_workers_min_instance_count     = 3                                                    # Replace with the minimum number of worker nodes you want to use
   eks_workers_max_instance_count     = 6                                                    # Replace with the maximum number of worker nodes you want to use
   eks_workers_desired_instance_count = 3                                                    # Replace with the desired number of worker nodes you want to use
-  enable_spot_instances              = true                                                 # If you want to use spot instances, set this to true
+  enable_spot_instances              = true                                                 # If you want to use spot instances, set this to true, disable this if you are facing availability issues in aws.
   sso_enabled                        = false                                                # If you want to use SSO to authenticate users to the cluster, set this to true
   aws_auth_sso_users                 = [{ role = "YOUR_ROLE_NAME", arn = "YOUR_ROLE_ARN" }] # If you want to use SSO to authenticate users to the cluster, add the users you want to authenticate to the cluster here
 

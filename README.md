@@ -7,13 +7,11 @@ This repository provides an automated way to create Kubernetes clusters using di
 ### Prerequisites
 
 1. **AWS CLI**
-
    - Used for authentication and cluster access.
    - Download: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
    - You must have your AWS credentials configured (`aws configure`) with permissions to create EKS, VPC, and related resources.
 
 2. **Terraform (>= 1.11.0)**
-
    - Used for infrastructure provisioning.
    - Download: https://www.terraform.io/downloads
 
@@ -32,7 +30,44 @@ This repository provides an automated way to create Kubernetes clusters using di
    cd atscale-k8s-blueprints/environments/aws
    ```
 
-2. **Configure Local Variables**
+2. **Customize Bootstrap Variables**
+   Before running the bootstrap script, customize the variables in the `bootstrap-tf-backend.sh` file:
+
+   ```sh
+   cd bootstrap
+   ```
+
+   Edit the `bootstrap-tf-backend.sh` file and update the following variables at the top of the file:
+
+   ```bash
+   BUCKET_NAME="[YOUR_BUCKET_NAME]"
+   REGION="[YOUR_REGION]"
+   STATE_FILE_KEY="[YOUR_STATE_FILE_KEY]"
+   AWS_PROFILE="[YOUR_AWS_PROFILE]"
+   ```
+
+   Replace the placeholder values with your own:
+   - `BUCKET_NAME`: Unique S3 bucket name for Terraform state (e.g., "my-terraform-state-bucket")
+   - `REGION`: AWS region (e.g., "us-east-1", "us-west-2")
+   - `STATE_FILE_KEY`: State file path/key (e.g., "tf-state/terraform.tfstate")
+   - `AWS_PROFILE`: Your AWS CLI profile name (or use "default" for default profile)
+
+3. **Authenticate with AWS**
+   Ensure you have your AWS credentials configured before running the bootstrap script:
+
+   ```sh
+   aws configure
+   ```
+
+4. **Run the Bootstrap Script**
+   After customizing the variables and authenticating, run the bootstrap script to set up the remote state file and backend:
+
+   ```sh
+   ./bootstrap-tf-backend.sh
+   cd ..
+   ```
+
+5. **Configure Local Variables**
    Inside the `main.tf` file in the `environments/aws` directory, configure the required variables under the `locals` block:
 
    ```hcl
@@ -41,13 +76,13 @@ This repository provides an automated way to create Kubernetes clusters using di
    region       = "us-west-2"         # AWS region to deploy resources
    ```
 
-3. **Create the EKS Cluster**
+6. **Create the EKS Cluster**
 
    ```sh
    make create-cluster
    ```
 
-4. **Access your EKS Cluster**
+7. **Access your EKS Cluster**
    After the cluster is created, the output will include a command similar to:
    ```sh
    aws eks update-kubeconfig --region <region> --name <cluster_name>
@@ -67,13 +102,11 @@ This repository provides an automated way to create Kubernetes clusters using di
 ### Prerequisites
 
 1. **Azure CLI**
-
    - Used for authentication and cluster access.
    - Download: https://docs.microsoft.com/en-us/cli/azure/install-azure-cli
    - You must have your Azure credentials configured with permissions to create AKS, VNet, and related resources.
 
 2. **Terraform (>= 1.11.0)**
-
    - Used for infrastructure provisioning.
    - Download: https://www.terraform.io/downloads
 
@@ -111,7 +144,6 @@ This repository provides an automated way to create Kubernetes clusters using di
    ```
 
    Replace the placeholder values with your own:
-
    - `RESOURCE_GROUP_NAME`: Your Azure resource group name (e.g., "rg-atscale-blueprint")
    - `LOCATION`: Azure region (e.g., "westus3")
    - `STORAGE_ACCOUNT_NAME`: Unique storage account name (lowercase, alphanumeric only, e.g., "mystorageaccount123")
@@ -166,7 +198,6 @@ This repository provides an automated way to create Kubernetes clusters using di
 ### Prerequisites
 
 1. **Google Cloud SDK (gcloud CLI)**
-
    - Used for authentication and cluster access.
    - Download: https://cloud.google.com/sdk/docs/install
    - You must have your GCP credentials configured with permissions to create GKE, VPC, and related resources.
@@ -176,7 +207,6 @@ This repository provides an automated way to create Kubernetes clusters using di
      ```
 
 2. **Terraform (>= 1.11.0)**
-
    - Used for infrastructure provisioning.
    - Download: https://www.terraform.io/downloads
 
@@ -212,7 +242,6 @@ This repository provides an automated way to create Kubernetes clusters using di
    ```
 
    Replace the placeholder values with your own:
-
    - `PROJECT_ID`: Your GCP project ID (e.g., "my-project-123")
    - `BUCKET_NAME`: Unique GCS bucket name for Terraform state (e.g., "my-terraform-state-bucket")
    - `LOCATION`: GCS bucket location (e.g., "us-central1", "us-east1")

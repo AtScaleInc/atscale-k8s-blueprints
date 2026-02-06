@@ -1,6 +1,6 @@
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.0"
+  version = "~> 21.10"
 
   name               = var.cluster_name
   kubernetes_version = var.k8s_version
@@ -96,14 +96,6 @@ module "eks" {
       to_port     = 0
       type        = "ingress"
       self        = true
-    }
-    metrics_server_allow_from_control_plane = {
-      type                          = "ingress"
-      protocol                      = "tcp"
-      from_port                     = 10251
-      to_port                       = 10251
-      source_cluster_security_group = true
-      description                   = "Allow access from control plane to metrics server webhook"
     }
     egress_all = {
       description      = "Node all egress"
