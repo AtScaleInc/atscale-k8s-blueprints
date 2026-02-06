@@ -17,7 +17,7 @@ locals {
   eks_workers_min_instance_count     = 3                                                    # Replace with the minimum number of worker nodes you want to use
   eks_workers_max_instance_count     = 6                                                    # Replace with the maximum number of worker nodes you want to use
   eks_workers_desired_instance_count = 3                                                    # Replace with the desired number of worker nodes you want to use
-  enable_spot_instances              = true                                                 # If you want to use spot instances, set this to true
+  enable_spot_instances              = true                                                 # If you want to use spot instances, set this to true, disable this if you are facing availability issues in aws.
   sso_enabled                        = false                                                # If you want to use SSO to authenticate users to the cluster, set this to true
   aws_auth_sso_users                 = [{ role = "YOUR_ROLE_NAME", arn = "YOUR_ROLE_ARN" }] # If you want to use SSO to authenticate users to the cluster, add the users you want to authenticate to the cluster here
 
