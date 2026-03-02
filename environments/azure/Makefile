@@ -8,13 +8,14 @@ create-cluster:
 		echo ""; \
 		echo "=== Step 1: Configure Terraform Backend ==="; \
 		echo ""; \
-		read -p "S3 bucket name for Terraform state: " BUCKET_NAME; \
-		read -p "AWS Region [us-east-1]: " REGION; \
-		REGION=$${REGION:-us-east-1}; \
-		read -p "State file key [terraform/state]: " STATE_FILE_KEY; \
-		STATE_FILE_KEY=$${STATE_FILE_KEY:-terraform/state}; \
-		read -p "AWS CLI profile [default]: " AWS_PROFILE; \
-		AWS_PROFILE=$${AWS_PROFILE:-default}; \
+		read -p "Azure Subscription ID: " SUBSCRIPTION_ID; \
+		read -p "Resource group name for TF state: " RESOURCE_GROUP_NAME; \
+		read -p "Azure Region (e.g., eastus, westus3): " LOCATION; \
+		read -p "Storage account name (lowercase, alphanumeric): " STORAGE_ACCOUNT_NAME; \
+		read -p "Container name [tfstate]: " CONTAINER_NAME; \
+		CONTAINER_NAME=$${CONTAINER_NAME:-tfstate}; \
+		read -p "State file name [terraform.tfstate]: " STATE_FILE_NAME; \
+		STATE_FILE_NAME=$${STATE_FILE_NAME:-terraform.tfstate}; \
 	fi; \
 	if [ ! -f terraform.tfvars ]; then \
 		NEED_TFVARS=true; \
@@ -22,16 +23,16 @@ create-cluster:
 		echo "=== Step 2: Configure Environment ==="; \
 		echo ""; \
 		read -p "Environment name (e.g., dev, staging, prod): " ENV_NAME; \
-		read -p "AWS Region (e.g., us-east-1): " TF_REGION; \
-		TF_REGION=$${TF_REGION:-$$REGION}; \
-		read -p "VPC CIDR [10.84.0.0/20]: " VPC_CIDR; \
-		VPC_CIDR=$${VPC_CIDR:-10.84.0.0/20}; \
-		read -p "Kubernetes version [1.34]: " K8S_VERSION; \
-		K8S_VERSION=$${K8S_VERSION:-1.34}; \
-		read -p "Node instance type [m6a.xlarge]: " INSTANCE_TYPE; \
-		INSTANCE_TYPE=$${INSTANCE_TYPE:-m6a.xlarge}; \
+		read -p "Azure Region (e.g., eastus, westus3): " REGION; \
+		read -p "Resource group name: " RESOURCE_GROUP; \
+		read -p "VNet CIDR (e.g., 10.85.0.0/22): " VPC_CIDR; \
+		read -p "AAD admin group object ID: " AAD_GROUP; \
+		read -p "Kubernetes version [1.31]: " K8S_VERSION; \
+		K8S_VERSION=$${K8S_VERSION:-1.31}; \
+		read -p "Node VM size [Standard_D8s_v5]: " VM_SIZE; \
+		VM_SIZE=$${VM_SIZE:-Standard_D8s_v5}; \
 		echo ""; \
-		echo "  Note: EKS nodes run in private subnets."; \
+		echo "  Note: AKS nodes run in private subnets."; \
 		echo "        You can choose whether the API server (kubectl endpoint) is public or private."; \
 		echo ""; \
 		read -p "Make API server publicly accessible? (true/false) [true]: " PUBLIC_API; \
@@ -40,8 +41,8 @@ create-cluster:
 		if [ "$$PUBLIC_API" = "false" ]; then \
 			read -p "CIDR allowed to access the private API server (e.g., 10.0.0.0/8): " AUTHORIZED_CIDR; \
 		fi; \
-		read -p "Enable RDS PostgreSQL? (true/false) [false]: " ENABLE_RDS; \
-		ENABLE_RDS=$${ENABLE_RDS:-false}; \
+		read -p "Enable PostgreSQL? (true/false) [false]: " ENABLE_PG; \
+		ENABLE_PG=$${ENABLE_PG:-false}; \
 	fi; \
 	if [ "$$NEED_BACKEND" = "false" ] && [ "$$NEED_TFVARS" = "false" ]; then \
 		echo "Backend and configuration already exist, proceeding with deployment..."; \
@@ -52,36 +53,37 @@ create-cluster:
 		echo "============================================"; \
 		echo ""; \
 		if [ "$$NEED_BACKEND" = "true" ]; then \
-			echo "  Terraform Backend (S3):"; \
-			echo "    Bucket:      $$BUCKET_NAME"; \
-			echo "    Region:      $$REGION"; \
-			echo "    State key:   $$STATE_FILE_KEY"; \
-			echo "    AWS Profile: $$AWS_PROFILE"; \
+			echo "  Terraform Backend (Azure Storage):"; \
+			echo "    Subscription:    $$SUBSCRIPTION_ID"; \
+			echo "    Resource group:  $$RESOURCE_GROUP_NAME"; \
+			echo "    Region:          $$LOCATION"; \
+			echo "    Storage account: $$STORAGE_ACCOUNT_NAME"; \
+			echo "    Container:       $$CONTAINER_NAME"; \
+			echo "    State file:      $$STATE_FILE_NAME"; \
 			echo ""; \
 		else \
 			echo "  Terraform Backend: already configured"; \
 			echo ""; \
 		fi; \
 		if [ "$$NEED_TFVARS" = "true" ]; then \
-			echo "  EKS Cluster:"; \
+			echo "  AKS Cluster:"; \
 			echo "    Environment:     $$ENV_NAME"; \
-			echo "    Region:          $$TF_REGION"; \
-			echo "    VPC CIDR:        $$VPC_CIDR"; \
-			echo "    Cluster name:    $${ENV_NAME}-eks"; \
+			echo "    Region:          $$REGION"; \
+			echo "    Resource group:  $$RESOURCE_GROUP"; \
+			echo "    VNet CIDR:       $$VPC_CIDR"; \
+			echo "    AAD group:       $$AAD_GROUP"; \
 			echo "    K8s version:     $$K8S_VERSION"; \
-			echo "    Instance type:   $$INSTANCE_TYPE"; \
-			echo "    Node count:      3-6 (default)"; \
-			echo "    Spot instances:  enabled (default)"; \
+			echo "    VM size:         $$VM_SIZE"; \
+			echo "    Node count:      3 (default)"; \
 			echo "    Nodes:           always private (private subnets)"; \
 			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private (CIDR: $$AUTHORIZED_CIDR)" || echo "public")"; \
 			echo ""; \
-			echo "  Database (RDS):"; \
-			if [ "$$ENABLE_RDS" = "true" ]; then \
+			echo "  Database (PostgreSQL Flexible Server):"; \
+			if [ "$$ENABLE_PG" = "true" ]; then \
 				echo "    Enabled:         yes"; \
-				echo "    Engine:          PostgreSQL 16.11"; \
-				echo "    Instance class:  db.r6gd.xlarge (default)"; \
-				echo "    Storage:         250 GB (default)"; \
-				echo "    Database name:   postgres"; \
+				echo "    Version:         16"; \
+				echo "    SKU:             GP_Standard_D4ads_v5 (default)"; \
+				echo "    Storage:         64 GB (default)"; \
 				echo "    Username:        postgres"; \
 			else \
 				echo "    Enabled:         no"; \
@@ -101,31 +103,35 @@ create-cluster:
 		fi; \
 		echo ""; \
 		if [ "$$NEED_BACKEND" = "true" ]; then \
-			BUCKET_NAME=$$BUCKET_NAME REGION=$$REGION STATE_FILE_KEY=$$STATE_FILE_KEY \
-				AWS_PROFILE=$$AWS_PROFILE bash ./bootstrap/bootstrap-tf-backend.sh; \
+			RESOURCE_GROUP_NAME=$$RESOURCE_GROUP_NAME LOCATION=$$LOCATION \
+				STORAGE_ACCOUNT_NAME=$$STORAGE_ACCOUNT_NAME CONTAINER_NAME=$$CONTAINER_NAME \
+				STATE_FILE_NAME=$$STATE_FILE_NAME SUBSCRIPTION_ID=$$SUBSCRIPTION_ID \
+				bash ./bootstrap/bootstrap-tf-backend.sh; \
 		fi; \
 		if [ "$$NEED_TFVARS" = "true" ]; then \
-			echo 'environment            = "'$$ENV_NAME'"' > terraform.tfvars; \
-			echo 'region                 = "'$$TF_REGION'"' >> terraform.tfvars; \
-			echo 'vpc_cidr               = "'$$VPC_CIDR'"' >> terraform.tfvars; \
-			echo 'k8s_version            = "'$$K8S_VERSION'"' >> terraform.tfvars; \
-			echo 'eks_instance_types     = ["'$$INSTANCE_TYPE'"]' >> terraform.tfvars; \
-			echo 'public_api_server      = '$$PUBLIC_API >> terraform.tfvars; \
-			echo 'authorized_network_cidr = "'$$AUTHORIZED_CIDR'"' >> terraform.tfvars; \
-			echo 'enable_rds             = '$$ENABLE_RDS >> terraform.tfvars; \
+			echo 'environment                = "'$$ENV_NAME'"' > terraform.tfvars; \
+			echo 'region                     = "'$$REGION'"' >> terraform.tfvars; \
+			echo 'resource_group_name        = "'$$RESOURCE_GROUP'"' >> terraform.tfvars; \
+			echo 'vpc_cidr                   = "'$$VPC_CIDR'"' >> terraform.tfvars; \
+			echo 'aad_admin_group_object_id  = "'$$AAD_GROUP'"' >> terraform.tfvars; \
+			echo 'aks_version                = "'$$K8S_VERSION'"' >> terraform.tfvars; \
+			echo 'aks_node_size              = "'$$VM_SIZE'"' >> terraform.tfvars; \
+			echo 'public_api_server          = '$$PUBLIC_API >> terraform.tfvars; \
+			echo 'authorized_network_cidr    = "'$$AUTHORIZED_CIDR'"' >> terraform.tfvars; \
+			echo 'enable_postgresql          = '$$ENABLE_PG >> terraform.tfvars; \
 			echo "terraform.tfvars generated."; \
 		fi; \
 	fi; \
 	terraform init && \
 	echo "" && \
 	echo "============================================" && \
-	echo "  Generating Terraform plan (VPC)..." && \
+	echo "  Generating Terraform plan (Networking)..." && \
 	echo "============================================" && \
 	echo "" && \
-	terraform plan -out=tfplan --target=module.vpc && \
+	terraform plan -out=tfplan --target=module.networking && \
 	echo "" && \
-	read -p "Apply VPC resources? (yes/no): " APPLY_VPC; \
-	if [ "$$APPLY_VPC" != "yes" ]; then \
+	read -p "Apply networking resources? (yes/no): " APPLY_NET; \
+	if [ "$$APPLY_NET" != "yes" ]; then \
 		rm -f tfplan; \
 		echo "Cancelled. No resources were created."; \
 		exit 0; \
@@ -142,27 +148,28 @@ create-cluster:
 	read -p "Apply this plan and create all resources? (yes/no): " APPLY_CONFIRM; \
 	if [ "$$APPLY_CONFIRM" != "yes" ]; then \
 		rm -f tfplan; \
-		echo "Cancelled. VPC was created but EKS/RDS were not."; \
+		echo "Cancelled. Networking was created but AKS/PostgreSQL were not."; \
 		exit 0; \
 	fi; \
 	terraform apply tfplan && \
 	rm -f tfplan && \
 	echo "" && \
 	echo "============================================" && \
-	echo "  EKS Cluster Created Successfully!" && \
+	echo "  AKS Cluster Created Successfully!" && \
 	echo "============================================" && \
 	echo "" && \
-	echo "Cluster: $$(terraform output -raw cluster_name)" && \
+	echo "Cluster: $$(terraform output -raw aks_name)" && \
 	echo "Region:  $$(terraform output -raw region)" && \
 	echo "" && \
 	echo "To connect to this cluster, run:" && \
-	echo "  aws eks update-kubeconfig --region $$(terraform output -raw region) --name $$(terraform output -raw cluster_name)" && \
+	echo "  az aks get-credentials --resource-group $$(terraform output -raw resource_group_name) --name $$(terraform output -raw aks_name)" && \
+	echo "  kubelogin convert-kubeconfig -l azurecli" && \
 	echo "" && \
 	echo "Verify with:" && \
 	echo "  kubectl get nodes" && \
 	echo "" && \
-	if terraform output -json rds_credentials 2>/dev/null | grep -q endpoint; then \
-		echo "RDS credentials: terraform output rds_credentials"; \
+	if terraform output -json postgresql_credentials 2>/dev/null | grep -q fqdn; then \
+		echo "PostgreSQL credentials: terraform output postgresql_credentials"; \
 	fi
 
 delete-cluster:

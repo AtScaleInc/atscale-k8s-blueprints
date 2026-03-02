@@ -91,3 +91,9 @@ variable "aws_auth_sso_users" {
   description = "AWS SSO users"
   type        = list(object({ role = string, arn = string }))
 }
+
+variable "enable_private_cluster" {
+  description = "Whether to disable public access to the EKS API server endpoint"
+  type        = bool
+  default     = false
+}

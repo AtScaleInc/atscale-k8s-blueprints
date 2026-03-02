@@ -1,22 +1,22 @@
-# ################################################################################
-# # Cluster
-# ################################################################################
+################################################################################
+# Cluster
+################################################################################
 
 output "region" {
-  value = local.region
+  value = var.region
 }
 
 output "project_id" {
-  value = local.project_id
+  value = var.project_id
 }
 
 output "cluster_name" {
-  value = local.cluster_name
+  value = var.cluster_name
 }
 
 output "cluster_get_credentials_command" {
   description = "Command to get credentials for the GKE cluster"
-  value       = "gcloud container clusters get-credentials ${local.cluster_name} --region ${local.region} --project ${local.project_id}"
+  value       = "gcloud container clusters get-credentials ${var.cluster_name} --region ${var.region} --project ${var.project_id}"
 }
 
 ################################################################################

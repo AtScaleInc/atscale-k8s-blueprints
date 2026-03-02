@@ -1,20 +1,195 @@
-.PHONY: create-cluster
+.PHONY: create-cluster delete-cluster plan
 
 create-cluster:
-	terraform init
-	terraform apply
-	@echo
-	@echo "GKE Cluster Access Instructions:"
-	@echo "--------------------------------"
-	@echo "To connect to this cluster, run: $$(terraform output -raw cluster_get_credentials_command)"
-	@echo "--------------------------------"
-	@if terraform output -raw database_public_ip 2>/dev/null | grep -q .; then \
-		echo "To connect to the database, make sure you have the component gcloud cloud-sql-proxy installed and running,"; \
-		echo "then run the following command:"; \
-		echo "cloud-sql-proxy $$(terraform output -raw database_connection_name) --port=5432"; \
-		echo "then you can connect to the database using the following information:"; \
-		echo "Database URL: 127.0.0.1:5432"; \
-		echo "Database User: $$(terraform output -raw database_user)"; \
-		echo "Database Password: $$(terraform output -raw database_password)"; \
-		echo "--------------------------------"; \
+	@NEED_BACKEND=false; \
+	NEED_TFVARS=false; \
+	if [ ! -f backend.tf ]; then \
+		NEED_BACKEND=true; \
+		echo ""; \
+		echo "=== Step 1: Configure Terraform Backend ==="; \
+		echo ""; \
+		read -p "GCP Project ID: " PROJECT_ID; \
+		read -p "GCS bucket name for Terraform state: " BUCKET_NAME; \
+		read -p "GCP Region [us-central1]: " LOCATION; \
+		LOCATION=$${LOCATION:-us-central1}; \
+		read -p "State file prefix [terraform/state]: " STATE_FILE_PREFIX; \
+		STATE_FILE_PREFIX=$${STATE_FILE_PREFIX:-terraform/state}; \
+	fi; \
+	if [ ! -f terraform.tfvars ]; then \
+		NEED_TFVARS=true; \
+		echo ""; \
+		echo "=== Step 2: Configure Environment Variables ==="; \
+		echo ""; \
+		read -p "Environment name (e.g., dev, staging, prod): " ENV_NAME; \
+		read -p "GCP Project ID: " PROJECT_ID; \
+		PROJECT_ID=$${PROJECT_ID:-$$PROJECT_ID}; \
+		read -p "GKE GCP Region [us-central1]: " REGION; \
+		REGION=$${REGION:-us-central1}; \
+		read -p "Cluster name: " CLUSTER_NAME; \
+		read -p "Kubernetes version (e.g., 1.33): " K8S_VERSION; \
+		K8S_VERSION=$${K8S_VERSION:-1.33}; \
+		read -p "Node instance type [n2d-standard-4]: " INSTANCE_TYPE; \
+		INSTANCE_TYPE=$${INSTANCE_TYPE:-n2d-standard-4}; \
+		echo ""; \
+		echo "Network CIDR Configuration:"; \
+		echo "  GKE requires three non-overlapping CIDR ranges."; \
+		echo "  Recommended: 10.0.0.0/20 (nodes), 10.1.0.0/16 (pods), 10.2.0.0/20 (services)"; \
+		echo ""; \
+		read -p "Node subnet CIDR [10.0.0.0/20]: " SUBNET_CIDR; \
+		SUBNET_CIDR=$${SUBNET_CIDR:-10.0.0.0/20}; \
+		read -p "Pods secondary range CIDR [10.1.0.0/16]: " PODS_CIDR; \
+		PODS_CIDR=$${PODS_CIDR:-10.1.0.0/16}; \
+		read -p "Services secondary range CIDR [10.2.0.0/20]: " SERVICES_CIDR; \
+		SERVICES_CIDR=$${SERVICES_CIDR:-10.2.0.0/20}; \
+		echo ""; \
+		echo "  Note: GKE nodes are always private (no public IPs)."; \
+		echo "        You can choose whether the API server (kubectl endpoint) is public or private."; \
+		echo ""; \
+		read -p "Make API server publicly accessible? (true/false) [true]: " PUBLIC_API; \
+		PUBLIC_API=$${PUBLIC_API:-true}; \
+		AUTHORIZED_CIDR=""; \
+		if [ "$$PUBLIC_API" = "false" ]; then \
+			read -p "CIDR allowed to access the private API server (e.g., 10.0.0.0/8): " AUTHORIZED_CIDR; \
+		fi; \
+		read -p "Enable Cloud SQL PostgreSQL? (true/false) [false]: " ENABLE_DB; \
+		ENABLE_DB=$${ENABLE_DB:-false}; \
+	fi; \
+	if [ "$$NEED_BACKEND" = "false" ] && [ "$$NEED_TFVARS" = "false" ]; then \
+		echo "Backend and configuration already exist, proceeding with deployment..."; \
+	else \
+		echo ""; \
+		echo "============================================"; \
+		echo "  Deployment Summary"; \
+		echo "============================================"; \
+		echo ""; \
+		if [ "$$NEED_BACKEND" = "true" ]; then \
+			echo "  Terraform Backend (GCS):"; \
+			echo "    Project:      $$PROJECT_ID"; \
+			echo "    Bucket:       $$BUCKET_NAME"; \
+			echo "    Region:       $$LOCATION"; \
+			echo "    State prefix: $$STATE_FILE_PREFIX"; \
+			echo ""; \
+		else \
+			echo "  Terraform Backend: already configured"; \
+			echo ""; \
+		fi; \
+		if [ "$$NEED_TFVARS" = "true" ]; then \
+			echo "  GKE Cluster:"; \
+			echo "    Project:         $$PROJECT_ID"; \
+			echo "    Environment:     $$ENV_NAME"; \
+			echo "    Region:          $$REGION"; \
+			echo "    Cluster name:    $$CLUSTER_NAME"; \
+			echo "    K8s version:     $$K8S_VERSION"; \
+			echo "    Instance type:   $$INSTANCE_TYPE"; \
+			echo "    Node count:      1-3 (default)"; \
+			echo "    Spot instances:  enabled (default)"; \
+			echo "    Nodes:           always private (no public IPs)"; \
+			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private (CIDR: $$AUTHORIZED_CIDR)" || echo "public")"; \
+			echo ""; \
+			echo "  Network CIDRs:"; \
+			echo "    Node subnet:     $$SUBNET_CIDR"; \
+			echo "    Pods range:      $$PODS_CIDR"; \
+			echo "    Services range:  $$SERVICES_CIDR"; \
+			echo ""; \
+			echo "  Database (Cloud SQL):"; \
+			if [ "$$ENABLE_DB" = "true" ]; then \
+				echo "    Enabled:         yes"; \
+				echo "    Engine:          PostgreSQL 16"; \
+				echo "    Tier:            db-f1-micro (default)"; \
+				echo "    Database name:   postgres"; \
+				echo "    Username:        postgres"; \
+			else \
+				echo "    Enabled:         no"; \
+			fi; \
+			echo ""; \
+		else \
+			echo "  Configuration: using existing terraform.tfvars"; \
+			echo ""; \
+		fi; \
+		echo "  (Edit variables.tf for all available options)"; \
+		echo "============================================"; \
+		echo ""; \
+		read -p "Proceed with deployment? (yes/no): " CONFIRM; \
+		if [ "$$CONFIRM" != "yes" ]; then \
+			echo "Cancelled. No resources were created."; \
+			exit 0; \
+		fi; \
+		echo ""; \
+		if [ "$$NEED_BACKEND" = "true" ]; then \
+			PROJECT_ID=$$PROJECT_ID \
+			BUCKET_NAME=$$BUCKET_NAME \
+			LOCATION=$$LOCATION \
+			STATE_FILE_PREFIX=$$STATE_FILE_PREFIX \
+			bash ./bootstrap/bootstrap-tf-backend.sh; \
+		fi; \
+		if [ "$$NEED_TFVARS" = "true" ]; then \
+			echo 'environment                   = "'$$ENV_NAME'"' > terraform.tfvars; \
+			echo 'project_id                    = "'$$PROJECT_ID'"' >> terraform.tfvars; \
+			echo 'region                        = "'$$REGION'"' >> terraform.tfvars; \
+			echo 'cluster_name                  = "'$$CLUSTER_NAME'"' >> terraform.tfvars; \
+			echo 'subnet_cidr                   = "'$$SUBNET_CIDR'"' >> terraform.tfvars; \
+			echo 'pods_secondary_range_cidr     = "'$$PODS_CIDR'"' >> terraform.tfvars; \
+			echo 'services_secondary_range_cidr = "'$$SERVICES_CIDR'"' >> terraform.tfvars; \
+			echo 'public_api_server             = '$$PUBLIC_API >> terraform.tfvars; \
+			echo 'authorized_network_cidr       = "'$$AUTHORIZED_CIDR'"' >> terraform.tfvars; \
+			echo 'enable_postgres_database      = '$$ENABLE_DB >> terraform.tfvars; \
+			echo 'k8s_version                   = "'$$K8S_VERSION'"' >> terraform.tfvars; \
+			echo 'gke_instance_types            = ["'$$INSTANCE_TYPE'"]' >> terraform.tfvars; \
+			echo "terraform.tfvars generated."; \
+		fi; \
+	fi; \
+	terraform init && \
+	echo "" && \
+	echo "============================================" && \
+	echo "  Generating Terraform plan..." && \
+	echo "============================================" && \
+	echo "" && \
+	terraform plan -out=tfplan && \
+	echo "" && \
+	read -p "Apply this plan and create resources? (yes/no): " APPLY_CONFIRM; \
+	if [ "$$APPLY_CONFIRM" != "yes" ]; then \
+		rm -f tfplan; \
+		echo "Cancelled. No resources were created."; \
+		exit 0; \
+	fi; \
+	terraform apply tfplan && \
+	rm -f tfplan && \
+	echo "" && \
+	echo "============================================" && \
+	echo "  GKE Cluster Created Successfully!" && \
+	echo "============================================" && \
+	echo "" && \
+	echo "Cluster: $$(terraform output -raw cluster_name)" && \
+	echo "Region:  $$(terraform output -raw region)" && \
+	echo "Project: $$(terraform output -raw project_id)" && \
+	echo "" && \
+	echo "To connect to this cluster, run:" && \
+	echo "  $$(terraform output -raw cluster_get_credentials_command)" && \
+	echo "" && \
+	echo "Verify with:" && \
+	echo "  kubectl get nodes" && \
+	echo "" && \
+	if terraform output -raw database_public_ip 2>/dev/null | grep -q .; then \
+		echo "Database connection:"; \
+		echo "  cloud-sql-proxy $$(terraform output -raw database_connection_name) --port=5432"; \
+		echo "  Database URL:      127.0.0.1:5432"; \
+		echo "  Database User:     $$(terraform output -raw database_user)"; \
+		echo "  Database Password: $$(terraform output -raw database_password)"; \
+		echo ""; \
 	fi
+
+delete-cluster:
+	@echo "WARNING: This will destroy ALL resources including any databases and data."
+	@read -p "Are you sure? (yes/no): " CONFIRM; \
+	if [ "$$CONFIRM" = "yes" ]; then \
+		terraform destroy; \
+		echo ""; \
+		echo "Cluster deleted successfully."; \
+	else \
+		echo "Cancelled."; \
+	fi
+
+plan:
+	terraform init
+	terraform plan
+

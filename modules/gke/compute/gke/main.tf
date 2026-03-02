@@ -9,27 +9,20 @@ resource "google_container_cluster" "primary" {
   subnetwork               = var.subnetwork
   deletion_protection      = false
 
-  # Private cluster configuration (only if private nodes are enabled)
-  dynamic "private_cluster_config" {
-    for_each = var.enable_private_nodes ? [1] : []
-    content {
-      enable_private_nodes    = true
-      enable_private_endpoint = var.enable_private_endpoint
-      master_ipv4_cidr_block  = var.master_ipv4_cidr_block
-    }
+  # Nodes are always private (no external IPs)
+  private_cluster_config {
+    enable_private_nodes    = true
+    enable_private_endpoint = !var.public_api_server
+    master_ipv4_cidr_block  = var.master_ipv4_cidr_block
   }
 
-  # Master authorized networks (required when private endpoint is enabled)
-  # When private endpoint is enabled, master authorized networks must also be enabled
+  # When the API server is private, restrict which CIDRs can reach it
   dynamic "master_authorized_networks_config" {
-    for_each = var.enable_private_endpoint ? [1] : []
+    for_each = !var.public_api_server && var.authorized_network_cidr != "" ? [1] : []
     content {
-      dynamic "cidr_blocks" {
-        for_each = var.master_authorized_networks
-        content {
-          cidr_block   = cidr_blocks.value.cidr_block
-          display_name = cidr_blocks.value.display_name
-        }
+      cidr_blocks {
+        cidr_block   = var.authorized_network_cidr
+        display_name = "authorized-network"
       }
     }
   }

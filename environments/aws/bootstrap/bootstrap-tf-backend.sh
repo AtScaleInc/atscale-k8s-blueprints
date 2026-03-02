@@ -2,30 +2,25 @@
 
 set -euo pipefail
 
-# Variables - customize these!
-BUCKET_NAME="[YOUR_BUCKET_NAME]"
-REGION="[YOUR_REGION]"
-STATE_FILE_KEY="[YOUR_STATE_FILE_KEY]"
-AWS_PROFILE="[YOUR_AWS_PROFILE]"
+# Accept parameters via environment variables
+BUCKET_NAME="${BUCKET_NAME:-}"
+REGION="${REGION:-}"
+STATE_FILE_KEY="${STATE_FILE_KEY:-}"
+AWS_PROFILE="${AWS_PROFILE:-default}"
 
 # Validate inputs
-if [[ "$BUCKET_NAME" == "[YOUR_BUCKET_NAME]" ]] || [[ -z "$BUCKET_NAME" ]]; then
+if [[ -z "$BUCKET_NAME" ]]; then
   echo "Error: BUCKET_NAME must be set"
   exit 1
 fi
 
-if [[ "$REGION" == "[YOUR_REGION]" ]] || [[ -z "$REGION" ]]; then
+if [[ -z "$REGION" ]]; then
   echo "Error: REGION must be set (e.g., us-east-1, us-west-2)"
   exit 1
 fi
 
-if [[ "$STATE_FILE_KEY" == "[YOUR_STATE_FILE_KEY]" ]] || [[ -z "$STATE_FILE_KEY" ]]; then
+if [[ -z "$STATE_FILE_KEY" ]]; then
   echo "Error: STATE_FILE_KEY must be set (e.g., tf-state/terraform.tfstate)"
-  exit 1
-fi
-
-if [[ "$AWS_PROFILE" == "[YOUR_AWS_PROFILE]" ]] || [[ -z "$AWS_PROFILE" ]]; then
-  echo "Error: AWS_PROFILE must be set (or use 'default' for default profile)"
   exit 1
 fi
 
@@ -38,7 +33,6 @@ if aws s3 ls "s3://$BUCKET_NAME" --region $REGION >/dev/null 2>&1; then
 else
   echo "Creating S3 bucket $BUCKET_NAME in region $REGION..."
   if [[ "$REGION" == "us-east-1" ]]; then
-    # us-east-1 doesn't require LocationConstraint
     aws s3api create-bucket \
       --bucket $BUCKET_NAME \
       --region $REGION
@@ -131,14 +125,14 @@ terraform {
 }
 
 provider "aws" {
-  region  = local.region
+  region  = var.region
   profile = "$AWS_PROFILE"
 
   default_tags {
     tags = {
-      Environment = "\${local.environment}"
+      Environment = var.environment
       ManagedBy   = "terraform"
-      Project     = "\${local.environment}-tf"
+      Project     = "\${var.environment}-tf"
     }
   }
 }
@@ -162,19 +156,4 @@ echo "  bucket  = \"$BUCKET_NAME\""
 echo "  key     = \"$STATE_FILE_KEY\""
 echo "  region  = \"$REGION\""
 echo "  profile = \"$AWS_PROFILE\""
-echo "---------------------------------------------"
-echo ""
-echo "Note: Make sure you have the following AWS permissions:"
-echo "  - s3:CreateBucket"
-echo "  - s3:GetBucketVersioning"
-echo "  - s3:PutBucketVersioning"
-echo "  - s3:GetEncryptionConfiguration"
-echo "  - s3:PutEncryptionConfiguration"
-echo "  - s3:GetBucketPublicAccessBlock"
-echo "  - s3:PutBucketPublicAccessBlock"
-echo "  - s3:GetBucketTagging"
-echo "  - s3:PutBucketTagging"
-echo "  - s3:ListBucket"
-echo "  - s3:GetObject"
-echo "  - s3:PutObject"
 echo "---------------------------------------------"

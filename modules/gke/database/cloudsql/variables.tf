@@ -16,13 +16,12 @@ variable "region" {
 variable "database_version" {
   description = "The PostgreSQL database version"
   type        = string
-  default     = "POSTGRES_15"
+  default     = "POSTGRES_16"
 }
 
 variable "database_tier" {
   description = "The machine tier for the Cloud SQL instance"
   type        = string
-  default     = "db-f1-micro"
 }
 
 variable "database_name" {
@@ -35,4 +34,10 @@ variable "database_user" {
   description = "The database user name"
   type        = string
   default     = "postgres"
+}
+
+variable "deletion_protection" {
+  description = "Whether to enable deletion protection on the Cloud SQL instance"
+  type        = bool
+  default     = true
 }

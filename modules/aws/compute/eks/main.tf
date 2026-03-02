@@ -12,7 +12,7 @@ module "eks" {
   control_plane_subnet_ids                 = var.private_subnets_ids
 
   endpoint_private_access = true
-  endpoint_public_access  = true
+  endpoint_public_access  = !var.enable_private_cluster
   enable_irsa             = true
 
   addons = {

@@ -4,14 +4,15 @@ resource "google_sql_database_instance" "postgres" {
   database_version    = var.database_version
   region              = var.region
   project             = var.project_id
-  deletion_protection = false
+  deletion_protection = var.deletion_protection
 
   settings {
     tier = var.database_tier
 
     backup_configuration {
-      enabled    = false
-      start_time = "03:00"
+      enabled                        = true
+      start_time                     = "03:00"
+      point_in_time_recovery_enabled = true
     }
 
     ip_configuration {

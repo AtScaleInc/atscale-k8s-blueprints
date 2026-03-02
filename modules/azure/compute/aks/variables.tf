@@ -57,3 +57,9 @@ variable "aks_subnet_id" {
   type        = string
   description = "The ID of the AKS subnet"
 }
+
+variable "enable_private_cluster" {
+  description = "Whether to enable private cluster (API server not publicly accessible)"
+  type        = bool
+  default     = false
+}
