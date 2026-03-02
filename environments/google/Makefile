@@ -169,12 +169,12 @@ create-cluster:
 	echo "Verify with:" && \
 	echo "  kubectl get nodes" && \
 	echo "" && \
-	if terraform output -raw database_public_ip 2>/dev/null | grep -q .; then \
-		echo "Database connection:"; \
-		echo "  cloud-sql-proxy $$(terraform output -raw database_connection_name) --port=5432"; \
-		echo "  Database URL:      127.0.0.1:5432"; \
-		echo "  Database User:     $$(terraform output -raw database_user)"; \
-		echo "  Database Password: $$(terraform output -raw database_password)"; \
+	if terraform output -raw database_private_ip 2>/dev/null | grep -q .; then \
+		echo "Database connection (private IP, accessible from within the VPC):"; \
+		echo "  Private IP:   $$(terraform output -raw database_private_ip)"; \
+		echo "  Database:     $$(terraform output -raw database_name)"; \
+		echo "  User:         $$(terraform output -raw database_user)"; \
+		echo "  Password:     terraform output -raw database_password"; \
 		echo ""; \
 	fi
 

@@ -92,6 +92,11 @@ variable "aws_auth_sso_users" {
   type        = list(object({ role = string, arn = string }))
 }
 
+variable "kms_admin_role" {
+  description = "SSO role name that gets KMS key administrator access"
+  type        = string
+}
+
 variable "enable_private_cluster" {
   description = "Whether to disable public access to the EKS API server endpoint"
   type        = bool

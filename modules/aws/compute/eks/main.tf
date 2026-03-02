@@ -47,7 +47,7 @@ module "eks" {
 
   # Encryption key
   kms_key_administrators = var.sso_enabled ? [
-    for user in var.aws_auth_sso_users : user.arn if user.role == "devops"
+    for user in var.aws_auth_sso_users : user.arn if user.role == var.kms_admin_role
   ] : []
 
   access_entries = local.eks_sso_users

@@ -108,6 +108,12 @@ variable "aws_auth_sso_users" {
   default = []
 }
 
+variable "kms_admin_role" {
+  description = "SSO role name that gets KMS key administrator access"
+  type        = string
+  default     = "devops"
+}
+
 ############################################################################
 # RDS Variables
 ############################################################################

@@ -33,9 +33,9 @@ output "database_connection_name" {
   value       = length(module.database) > 0 ? module.database[0].instance_connection_name : null
 }
 
-output "database_public_ip" {
-  description = "The public IP address of the database"
-  value       = length(module.database) > 0 ? module.database[0].instance_public_ip : null
+output "database_private_ip" {
+  description = "The private IP address of the database"
+  value       = length(module.database) > 0 ? module.database[0].instance_private_ip : null
 }
 
 output "database_name" {

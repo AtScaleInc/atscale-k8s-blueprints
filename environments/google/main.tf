@@ -46,8 +46,6 @@ module "gke" {
 
   # Filestore Parameters
   tier = var.filestore_tier
-
-  depends_on = [module.vpc]
 }
 
 
@@ -62,8 +60,9 @@ module "database" {
   environment = var.environment
   region      = var.region
 
-  database_version = var.database_version
-  database_tier    = var.database_tier
-  database_name    = var.database_name
-  database_user    = var.database_user
+  vpc_network_self_link = module.vpc.vpc_self_link
+  database_version      = var.database_version
+  database_tier         = var.database_tier
+  database_name         = var.database_name
+  database_user         = var.database_user
 }

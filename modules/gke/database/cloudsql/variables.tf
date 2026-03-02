@@ -41,3 +41,8 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+variable "vpc_network_self_link" {
+  description = "Self link of the VPC network for private IP connectivity"
+  type        = string
+}
