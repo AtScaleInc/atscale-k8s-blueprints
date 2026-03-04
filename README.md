@@ -74,7 +74,11 @@ See the provider-specific READMEs for detailed resource lists.
 
 ## Configuration
 
-All user configuration is managed through `terraform.tfvars` files. The Makefile generates this file interactively on first run. You can also create or edit it manually before running `make create-cluster`.
+All user configuration is managed through `terraform.tfvars` files. The Makefile generates this file — along with the Terraform backend configuration (`backend.tf`) — interactively on first run.
+
+If you prefer to skip the interactive prompts, you can create both files manually before running the `make create-cluster-*` command. The Makefile detects their presence and proceeds straight to deployment. Templates and instructions are available in each provider's README:
+
+- [AWS manual setup](environments/aws/README.md#manual-setup-skip-interactive-prompts)
 
 See `variables.tf` in each environment directory for all available options with descriptions and defaults.
 
@@ -89,6 +93,15 @@ make delete-cluster-azure
 ```
 
 These will prompt for confirmation before destroying resources.
+
+> **Warning (AWS):** Before running `make delete-cluster-aws`, remove all Kubernetes `LoadBalancer` services and `Ingress` resources from the cluster. The AWS Load Balancer Controller provisions real AWS load balancers (ALBs, NLBs, Classic ELBs) that are **not tracked by Terraform**. If they still exist when `terraform destroy` runs, it will time out trying to delete the VPC.
+>
+> ```sh
+> kubectl delete svc --all-namespaces --field-selector spec.type=LoadBalancer
+> kubectl delete ingress --all --all-namespaces
+> ```
+>
+> Wait a minute for AWS to fully decommission the load balancers before proceeding.
 
 ## Project Structure
 

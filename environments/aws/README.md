@@ -48,7 +48,83 @@ The Makefile guides you through the full deployment in two phases:
 
 ## Configuration
 
-All configuration is managed through `terraform.tfvars`. The Makefile generates this file interactively on first run. You can also create or edit it manually.
+All configuration is managed through `terraform.tfvars`. The Makefile generates this file interactively on first run. Alternatively, you can create both files manually before running `make create-cluster` to skip the interactive prompts entirely — the Makefile detects their presence and proceeds straight to deployment.
+
+### Manual Setup (skip interactive prompts)
+
+**1. Create `backend.tf`** in `environments/aws/`:
+
+```hcl
+terraform {
+  required_version = ">= 1.11.0"
+
+  backend "s3" {
+    bucket       = "<YOUR_S3_BUCKET>"
+    key          = "<YOUR_STATE_KEY>"   # e.g. terraform/state
+    region       = "<YOUR_REGION>"
+    profile      = "<YOUR_AWS_PROFILE>" # defaults to "default"
+    use_lockfile = true
+  }
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = "1.19.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "3.2.4"
+    }
+  }
+}
+
+provider "aws" {
+  region  = var.region
+  profile = "<YOUR_AWS_PROFILE>"
+
+  default_tags {
+    tags = {
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Project     = "${var.environment}-tf"
+    }
+  }
+}
+
+provider "kubectl" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+  load_config_file       = false
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.region, "--profile", "<YOUR_AWS_PROFILE>"]
+    command     = "aws"
+  }
+}
+```
+
+> The S3 bucket must already exist. If it doesn't, run `bootstrap/bootstrap-tf-backend.sh` or create it manually with versioning and server-side encryption enabled.
+
+**2. Create `terraform.tfvars`** in `environments/aws/`:
+
+```hcl
+environment             = "dev"
+region                  = "us-east-1"
+vpc_cidr                = "10.84.0.0/20"
+k8s_version             = "1.34"
+eks_instance_types      = ["m6a.xlarge"]
+public_api_server       = true
+authorized_network_cidr = ""   # only needed when public_api_server = false
+enable_rds              = false
+```
+
+Once both files are in place, run `make create-cluster` and it will proceed directly to `terraform init` and deployment.
+
+**Available variables:**
 
 **Required variables** (no defaults, prompted by Makefile):
 
@@ -122,6 +198,18 @@ psql -h localhost -p 15432 -U postgres -d postgres
 Get RDS credentials: `terraform output rds_credentials`
 
 ## Cleanup
+
+> **Warning:** Before deleting the cluster, make sure all Kubernetes `LoadBalancer` services and `Ingress` resources have been removed from the cluster. These cause the AWS Load Balancer Controller to provision real AWS load balancers (ALBs, NLBs, Classic ELBs) that are **not tracked by Terraform**. If they still exist when `terraform destroy` runs, it will time out trying to delete the VPC because the load balancers hold references to its subnets and security groups.
+>
+> To remove them:
+> ```sh
+> # Delete all LoadBalancer-type services
+> kubectl delete svc --all-namespaces --field-selector spec.type=LoadBalancer
+>
+> # Delete all Ingress resources
+> kubectl delete ingress --all --all-namespaces
+> ```
+> Wait a minute for AWS to fully decommission the load balancers before proceeding.
 
 ```sh
 make delete-cluster
