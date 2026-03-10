@@ -49,6 +49,14 @@ create-cluster:
 		PUBLIC_API=$${PUBLIC_API:-true}; \
 		AUTHORIZED_CIDR=""; \
 		if [ "$$PUBLIC_API" = "false" ]; then \
+			echo ""; \
+			echo "  NOTE: Private clusters use a two-phase deployment:"; \
+			echo "    Phase 1: Deploy with a temporary public API endpoint"; \
+			echo "    Phase 2: Switch the API endpoint to private"; \
+			echo "  This is required because Terraform needs to reach the Kubernetes"; \
+			echo "  API to provision in-cluster resources (e.g., StorageClasses)."; \
+			echo "  The public endpoint is removed automatically once provisioning completes."; \
+			echo ""; \
 			read -p "CIDR allowed to access the private API server (e.g., 10.0.0.0/8): " AUTHORIZED_CIDR; \
 		fi; \
 		read -p "Enable Cloud SQL PostgreSQL? (true/false) [false]: " ENABLE_DB; \
@@ -138,6 +146,21 @@ create-cluster:
 			echo "terraform.tfvars generated."; \
 		fi; \
 	fi; \
+	IS_PRIVATE=false; \
+	if grep -q 'public_api_server[[:space:]]*=[[:space:]]*false' terraform.tfvars 2>/dev/null; then \
+		IS_PRIVATE=true; \
+		echo ""; \
+		echo "============================================"; \
+		echo "  Private Cluster: Two-Phase Deployment"; \
+		echo "============================================"; \
+		echo ""; \
+		echo "  Phase 1: Deploy with temporary public API endpoint"; \
+		echo "           (Terraform must reach the K8s API to provision in-cluster resources)"; \
+		echo "  Phase 2: Switch API endpoint to private (automatic)"; \
+		echo ""; \
+		sed -i.bak 's/public_api_server[[:space:]]*=.*/public_api_server             = true/' terraform.tfvars; \
+		rm -f terraform.tfvars.bak; \
+	fi; \
 	terraform init && \
 	echo "" && \
 	echo "============================================" && \
@@ -154,6 +177,19 @@ create-cluster:
 	fi; \
 	terraform apply tfplan && \
 	rm -f tfplan && \
+	if [ "$$IS_PRIVATE" = "true" ]; then \
+		echo "" && \
+		echo "============================================" && \
+		echo "  Private Cluster: Phase 2 of 2" && \
+		echo "  Switching API endpoint to private..." && \
+		echo "============================================" && \
+		echo "" && \
+		sed -i.bak 's/public_api_server[[:space:]]*=.*/public_api_server             = false/' terraform.tfvars && \
+		rm -f terraform.tfvars.bak && \
+		terraform plan -out=tfplan && \
+		terraform apply tfplan && \
+		rm -f tfplan; \
+	fi && \
 	echo "" && \
 	echo "============================================" && \
 	echo "  GKE Cluster Created Successfully!" && \
@@ -166,6 +202,14 @@ create-cluster:
 	echo "To connect to this cluster, run:" && \
 	echo "  $$(terraform output -raw cluster_get_credentials_command)" && \
 	echo "" && \
+	if [ "$$IS_PRIVATE" = "true" ]; then \
+		echo "NOTE: This is a private cluster. The API server is only reachable" && \
+		echo "from within the VPC. To run kubectl commands, connect via:" && \
+		echo "  - Cloud VPN or Cloud Interconnect" && \
+		echo "  - Bastion host in the VPC" && \
+		echo "  - Identity-Aware Proxy (IAP) tunnel" && \
+		echo ""; \
+	fi && \
 	echo "Verify with:" && \
 	echo "  kubectl get nodes" && \
 	echo "" && \

@@ -112,6 +112,15 @@ When setting `public_api_server = false`, set `authorized_network_cidr` to your 
 
 > **Note:** The private API server endpoint will have an IP in the `172.16.0.0/28` range. Your machine must be inside the GCP VPC (via Cloud VPN or bastion) to reach it.
 
+### Private Cluster Deployment
+
+When `public_api_server = false`, the Makefile automatically performs a **two-phase deployment**:
+
+1. **Phase 1** — Deploys the cluster with a temporary public API endpoint. This is required because Terraform needs to reach the Kubernetes API to provision in-cluster resources (e.g., Filestore StorageClass).
+2. **Phase 2** — Switches the API endpoint to private and applies the change. The public endpoint is removed automatically.
+
+No manual intervention is needed — the Makefile handles both phases transparently.
+
 ## Accessing the Cluster
 
 After creation, connect to the cluster:
@@ -147,6 +156,8 @@ make delete-cluster
 ```
 
 Or manually: `terraform destroy`
+
+> **Private clusters:** If `public_api_server = false`, you must run `terraform destroy` from a machine that can reach the VPC (e.g., via Cloud VPN, bastion host, or IAP tunnel). Terraform needs access to the Kubernetes API to delete in-cluster resources like StorageClasses.
 
 ## Troubleshooting
 
