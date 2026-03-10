@@ -87,12 +87,6 @@ variable "public_api_server" {
   default     = true
 }
 
-variable "authorized_network_cidr" {
-  description = "CIDR block allowed to access the private API server. Used when public_api_server is false."
-  type        = string
-  default     = ""
-}
-
 variable "sso_enabled" {
   description = "Whether to enable SSO authentication for cluster access"
   type        = bool

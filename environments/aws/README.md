@@ -118,7 +118,6 @@ vpc_cidr                = "10.84.0.0/20"
 k8s_version             = "1.34"
 eks_instance_types      = ["m6a.xlarge"]
 public_api_server       = true
-authorized_network_cidr = ""   # only needed when public_api_server = false
 enable_rds              = false
 ```
 
@@ -145,7 +144,6 @@ Once both files are in place, run `make create-cluster` and it will proceed dire
 | `eks_workers_desired_instance_count` | `3` | Desired worker nodes |
 | `enable_spot_instances` | `true` | Use spot instances for cost savings |
 | `public_api_server` | `true` | Make the EKS API server publicly accessible |
-| `authorized_network_cidr` | `""` | CIDR allowed to reach the API server when `public_api_server = false` |
 | `enable_rds` | `false` | Create RDS PostgreSQL instance |
 | `rds_engine_version` | `"16.11"` | PostgreSQL version |
 | `rds_instance_class` | `"db.r6gd.xlarge"` | RDS instance class |
@@ -163,7 +161,14 @@ EKS nodes always run in private subnets. The API server (used by `kubectl`) can 
 | `true` (default) | API server reachable from anywhere; secured by IAM authentication |
 | `false` | API server reachable only from within the VPC; requires VPN or bastion host to run `kubectl` |
 
-When setting `public_api_server = false`, set `authorized_network_cidr` to your VPC or VPN CIDR so internal traffic can reach the endpoint.
+### Private Cluster Deployment
+
+When `public_api_server = false`, the Makefile automatically performs a **two-phase deployment**:
+
+1. **Phase 1** — Deploys the cluster with a temporary public API endpoint. This is required because Terraform needs to reach the Kubernetes API to provision in-cluster resources (e.g., StorageClasses).
+2. **Phase 2** — Switches the API endpoint to private and applies the change. The public endpoint is removed automatically.
+
+No manual intervention is needed — the Makefile handles both phases transparently.
 
 ## Accessing the Cluster
 
@@ -216,6 +221,8 @@ make delete-cluster
 ```
 
 Or manually: `terraform destroy`
+
+> **Private clusters:** If `public_api_server = false`, you must run `terraform destroy` from a machine that can reach the VPC (e.g., via VPN, bastion host, or SSM). Terraform needs access to the Kubernetes API to delete in-cluster resources like StorageClasses.
 
 ## Troubleshooting
 

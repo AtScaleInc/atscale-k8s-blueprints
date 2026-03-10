@@ -36,9 +36,15 @@ create-cluster:
 		echo ""; \
 		read -p "Make API server publicly accessible? (true/false) [true]: " PUBLIC_API; \
 		PUBLIC_API=$${PUBLIC_API:-true}; \
-		AUTHORIZED_CIDR=""; \
 		if [ "$$PUBLIC_API" = "false" ]; then \
-			read -p "CIDR allowed to access the private API server (e.g., 10.0.0.0/8): " AUTHORIZED_CIDR; \
+			echo ""; \
+			echo "  NOTE: Private clusters use a two-phase deployment:"; \
+			echo "    Phase 1: Deploy with a temporary public API endpoint"; \
+			echo "    Phase 2: Switch the API endpoint to private"; \
+			echo "  This is required because Terraform needs to reach the Kubernetes"; \
+			echo "  API to provision in-cluster resources (e.g., StorageClasses)."; \
+			echo "  The public endpoint is removed automatically once provisioning completes."; \
+			echo ""; \
 		fi; \
 		read -p "Enable RDS PostgreSQL? (true/false) [false]: " ENABLE_RDS; \
 		ENABLE_RDS=$${ENABLE_RDS:-false}; \
@@ -73,7 +79,7 @@ create-cluster:
 			echo "    Node count:      3-6 (default)"; \
 			echo "    Spot instances:  enabled (default)"; \
 			echo "    Nodes:           always private (private subnets)"; \
-			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private (CIDR: $$AUTHORIZED_CIDR)" || echo "public")"; \
+			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private" || echo "public")"; \
 			echo ""; \
 			echo "  Database (RDS):"; \
 			if [ "$$ENABLE_RDS" = "true" ]; then \
@@ -111,10 +117,24 @@ create-cluster:
 			echo 'k8s_version            = "'$$K8S_VERSION'"' >> terraform.tfvars; \
 			echo 'eks_instance_types     = ["'$$INSTANCE_TYPE'"]' >> terraform.tfvars; \
 			echo 'public_api_server      = '$$PUBLIC_API >> terraform.tfvars; \
-			echo 'authorized_network_cidr = "'$$AUTHORIZED_CIDR'"' >> terraform.tfvars; \
 			echo 'enable_rds             = '$$ENABLE_RDS >> terraform.tfvars; \
 			echo "terraform.tfvars generated."; \
 		fi; \
+	fi; \
+	IS_PRIVATE=false; \
+	if grep -q 'public_api_server[[:space:]]*=[[:space:]]*false' terraform.tfvars 2>/dev/null; then \
+		IS_PRIVATE=true; \
+		echo ""; \
+		echo "============================================"; \
+		echo "  Private Cluster: Two-Phase Deployment"; \
+		echo "============================================"; \
+		echo ""; \
+		echo "  Phase 1: Deploy with temporary public API endpoint"; \
+		echo "           (Terraform must reach the K8s API to provision in-cluster resources)"; \
+		echo "  Phase 2: Switch API endpoint to private (automatic)"; \
+		echo ""; \
+		sed -i.bak 's/public_api_server[[:space:]]*=.*/public_api_server      = true/' terraform.tfvars; \
+		rm -f terraform.tfvars.bak; \
 	fi; \
 	terraform init && \
 	echo "" && \
@@ -147,6 +167,19 @@ create-cluster:
 	fi; \
 	terraform apply tfplan && \
 	rm -f tfplan && \
+	if [ "$$IS_PRIVATE" = "true" ]; then \
+		echo "" && \
+		echo "============================================" && \
+		echo "  Private Cluster: Phase 2 of 2" && \
+		echo "  Switching API endpoint to private..." && \
+		echo "============================================" && \
+		echo "" && \
+		sed -i.bak 's/public_api_server[[:space:]]*=.*/public_api_server      = false/' terraform.tfvars && \
+		rm -f terraform.tfvars.bak && \
+		terraform plan -out=tfplan && \
+		terraform apply tfplan && \
+		rm -f tfplan; \
+	fi && \
 	echo "" && \
 	echo "============================================" && \
 	echo "  EKS Cluster Created Successfully!" && \
@@ -158,6 +191,14 @@ create-cluster:
 	echo "To connect to this cluster, run:" && \
 	echo "  aws eks update-kubeconfig --region $$(terraform output -raw region) --name $$(terraform output -raw cluster_name)" && \
 	echo "" && \
+	if [ "$$IS_PRIVATE" = "true" ]; then \
+		echo "NOTE: This is a private cluster. The API server is only reachable" && \
+		echo "from within the VPC. To run kubectl commands, connect via:" && \
+		echo "  - AWS Client VPN" && \
+		echo "  - Bastion host in the VPC" && \
+		echo "  - AWS Systems Manager Session Manager" && \
+		echo ""; \
+	fi && \
 	echo "Verify with:" && \
 	echo "  kubectl get nodes" && \
 	echo "" && \
