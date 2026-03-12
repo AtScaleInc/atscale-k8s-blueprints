@@ -2,13 +2,34 @@
 
 set -euo pipefail
 
-# Variables - customize these!
-RESOURCE_GROUP_NAME="[YOUR_RESOURCE_GROUP_NAME]"
-LOCATION="[YOUR_REGION_NAME]"
-STORAGE_ACCOUNT_NAME="[YOUR_STORAGE_ACCOUNT_NAME]"
-CONTAINER_NAME="[YOUR_CONTAINER_NAME]"
-STATE_FILE_NAME="[YOUR_STATE_FILE_NAME]"
-SUBSCRIPTION_ID="[YOUR_SUBSCRIPTION_ID]"
+# Accept parameters via environment variables
+RESOURCE_GROUP_NAME="${RESOURCE_GROUP_NAME:-}"
+LOCATION="${LOCATION:-}"
+STORAGE_ACCOUNT_NAME="${STORAGE_ACCOUNT_NAME:-}"
+CONTAINER_NAME="${CONTAINER_NAME:-tfstate}"
+STATE_FILE_NAME="${STATE_FILE_NAME:-terraform.tfstate}"
+SUBSCRIPTION_ID="${SUBSCRIPTION_ID:-}"
+
+# Validate inputs
+if [[ -z "$RESOURCE_GROUP_NAME" ]]; then
+  echo "Error: RESOURCE_GROUP_NAME must be set"
+  exit 1
+fi
+
+if [[ -z "$LOCATION" ]]; then
+  echo "Error: LOCATION must be set (e.g., eastus, westus3)"
+  exit 1
+fi
+
+if [[ -z "$STORAGE_ACCOUNT_NAME" ]]; then
+  echo "Error: STORAGE_ACCOUNT_NAME must be set (lowercase, alphanumeric only)"
+  exit 1
+fi
+
+if [[ -z "$SUBSCRIPTION_ID" ]]; then
+  echo "Error: SUBSCRIPTION_ID must be set"
+  exit 1
+fi
 
 # 1. Create resource group
 az group create --name $RESOURCE_GROUP_NAME --location $LOCATION
@@ -44,25 +65,32 @@ az storage container create \
   --account-key $ACCOUNT_KEY
 
 echo "---------------------------------------------"
-echo "Use these values in your backend.tf:"
-echo "resource_group_name  = \"$RESOURCE_GROUP_NAME\""
-echo "storage_account_name = \"$STORAGE_ACCOUNT_NAME\""
-echo "container_name       = \"$CONTAINER_NAME\""
-echo "key                  = \"$STATE_FILE_NAME\""
+echo "Backend configuration created successfully!"
 echo "---------------------------------------------"
+echo "Generating backend.tf file..."
 
-cat <<EOF > ../backend.tf
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_FILE="${SCRIPT_DIR}/../backend.tf"
+
+cat <<EOF > "$BACKEND_FILE"
+# Terraform Backend
+################################################################################
+
 terraform {
+  required_version = ">= 1.11.0"
+
   backend "azurerm" {
     resource_group_name  = "$RESOURCE_GROUP_NAME"
     storage_account_name = "$STORAGE_ACCOUNT_NAME"
     container_name       = "$CONTAINER_NAME"
     key                  = "$STATE_FILE_NAME"
   }
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "4.52.0"
+      version = "~> 4.0"
     }
   }
 }
@@ -72,3 +100,12 @@ provider "azurerm" {
   subscription_id = "$SUBSCRIPTION_ID"
 }
 EOF
+
+echo "backend.tf file generated successfully at: $BACKEND_FILE"
+echo "---------------------------------------------"
+echo "Configuration details:"
+echo "  resource_group_name  = \"$RESOURCE_GROUP_NAME\""
+echo "  storage_account_name = \"$STORAGE_ACCOUNT_NAME\""
+echo "  container_name       = \"$CONTAINER_NAME\""
+echo "  key                  = \"$STATE_FILE_NAME\""
+echo "---------------------------------------------"

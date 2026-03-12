@@ -8,9 +8,9 @@ output "instance_connection_name" {
   value       = google_sql_database_instance.postgres.connection_name
 }
 
-output "instance_public_ip" {
-  description = "The public IP address of the Cloud SQL instance"
-  value       = google_sql_database_instance.postgres.public_ip_address
+output "instance_private_ip" {
+  description = "The private IP address of the Cloud SQL instance"
+  value       = google_sql_database_instance.postgres.private_ip_address
 }
 
 output "database_name" {

@@ -4,7 +4,7 @@ module "aks" {
 
   location                             = var.location
   prefix                               = var.prefix
-  private_cluster_enabled              = false
+  private_cluster_enabled              = var.enable_private_cluster
   rbac_aad_azure_rbac_enabled          = true # Enable RBAC for AAD
   role_based_access_control_enabled    = true # Enable RBAC for AKS
   rbac_aad_admin_group_object_ids      = var.aad_admin_group_object_ids

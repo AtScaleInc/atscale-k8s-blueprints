@@ -1,22 +1,22 @@
-# ################################################################################
-# # Cluster
-# ################################################################################
+################################################################################
+# Cluster
+################################################################################
 
 output "region" {
-  value = local.region
+  value = var.region
 }
 
 output "project_id" {
-  value = local.project_id
+  value = var.project_id
 }
 
 output "cluster_name" {
-  value = local.cluster_name
+  value = var.cluster_name
 }
 
 output "cluster_get_credentials_command" {
   description = "Command to get credentials for the GKE cluster"
-  value       = "gcloud container clusters get-credentials ${local.cluster_name} --region ${local.region} --project ${local.project_id}"
+  value       = "gcloud container clusters get-credentials ${var.cluster_name} --region ${var.region} --project ${var.project_id}"
 }
 
 ################################################################################
@@ -33,9 +33,9 @@ output "database_connection_name" {
   value       = length(module.database) > 0 ? module.database[0].instance_connection_name : null
 }
 
-output "database_public_ip" {
-  description = "The public IP address of the database"
-  value       = length(module.database) > 0 ? module.database[0].instance_public_ip : null
+output "database_private_ip" {
+  description = "The private IP address of the database"
+  value       = length(module.database) > 0 ? module.database[0].instance_private_ip : null
 }
 
 output "database_name" {

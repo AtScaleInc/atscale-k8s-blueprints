@@ -2,24 +2,24 @@
 
 set -euo pipefail
 
-# Variables - customize these!
-PROJECT_ID="[YOUR_PROJECT_ID]"
-BUCKET_NAME="[YOUR_BUCKET_NAME]"
-LOCATION="[YOUR_LOCATION]"
-STATE_FILE_PREFIX="[YOUR_STATE_FILE_PREFIX]"
+# Accept parameters via environment variables
+PROJECT_ID="${PROJECT_ID:-}"
+BUCKET_NAME="${BUCKET_NAME:-}"
+LOCATION="${LOCATION:-}"
+STATE_FILE_PREFIX="${STATE_FILE_PREFIX:-terraform/state}"
 
 # Validate inputs
-if [[ "$PROJECT_ID" == "[YOUR_PROJECT_ID]" ]] || [[ -z "$PROJECT_ID" ]]; then
+if [[ -z "$PROJECT_ID" ]]; then
   echo "Error: PROJECT_ID must be set"
   exit 1
 fi
 
-if [[ "$BUCKET_NAME" == "[YOUR_BUCKET_NAME]" ]] || [[ -z "$BUCKET_NAME" ]]; then
+if [[ -z "$BUCKET_NAME" ]]; then
   echo "Error: BUCKET_NAME must be set"
   exit 1
 fi
 
-if [[ "$LOCATION" == "[YOUR_LOCATION]" ]] || [[ -z "$LOCATION" ]]; then
+if [[ -z "$LOCATION" ]]; then
   echo "Error: LOCATION must be set (e.g., us-central1, us-east1)"
   exit 1
 fi
@@ -109,14 +109,16 @@ terraform {
   }
 }
 
+data "google_client_config" "default" {}
+
 provider "google" {
-  project = local.project_id
-  region  = local.region
+  project = var.project_id
+  region  = var.region
 
   default_labels = {
-    environment = lower(local.environment)
+    environment = lower(var.environment)
     managed_by  = "terraform"
-    project     = "\${lower(local.environment)}-tf"
+    project     = "\${lower(var.environment)}-gke-tf"
   }
 }
 
@@ -135,13 +137,3 @@ echo "Configuration details:"
 echo "  bucket = \"$BUCKET_NAME\""
 echo "  prefix = \"$STATE_FILE_PREFIX\""
 echo "---------------------------------------------"
-echo ""
-echo "Note: Make sure you have the following permissions:"
-echo "  - storage.buckets.create"
-echo "  - storage.buckets.get"
-echo "  - storage.buckets.update"
-echo "  - storage.objects.create"
-echo "  - storage.objects.get"
-echo "  - storage.objects.list"
-echo "---------------------------------------------"
-

@@ -15,7 +15,7 @@ resource "aws_db_proxy" "rds_proxy" {
   auth {
     auth_scheme               = "SECRETS"
     iam_auth                  = "DISABLED"
-    client_password_auth_type = "POSTGRES_MD5" # For enhanced security, consider changing to POSTGRES_SCRAM_SHA_256
+    client_password_auth_type = "POSTGRES_SCRAM_SHA_256"
     secret_arn                = aws_secretsmanager_secret.rds_credentials[0].arn
   }
 

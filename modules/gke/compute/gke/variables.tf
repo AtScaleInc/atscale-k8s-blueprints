@@ -92,25 +92,16 @@ variable "preemptible" {
   default     = false
 }
 
-variable "enable_private_nodes" {
-  description = "Whether to use private nodes (nodes without external IPs)"
+variable "public_api_server" {
+  description = "Whether the cluster API server is publicly accessible. Set to false for a fully private cluster (requires VPN or bastion to run kubectl)."
   type        = bool
-  default     = false
+  default     = true
 }
 
-variable "enable_private_endpoint" {
-  description = "Whether to use private endpoint (cluster API accessible only from within VPC)"
-  type        = bool
-  default     = false
-}
-
-variable "master_authorized_networks" {
-  description = "List of CIDR blocks authorized to access the master endpoint. Required when enable_private_endpoint is true."
-  type = list(object({
-    cidr_block   = string
-    display_name = string
-  }))
-  default = []
+variable "authorized_network_cidr" {
+  description = "CIDR block allowed to access the private API server. Required when public_api_server is false."
+  type        = string
+  default     = ""
 }
 
 variable "master_ipv4_cidr_block" {
