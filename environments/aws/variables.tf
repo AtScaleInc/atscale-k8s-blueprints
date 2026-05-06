@@ -81,6 +81,12 @@ variable "enable_spot_instances" {
   default     = true
 }
 
+variable "minimal_cluster" {
+  description = "Deploy a minimal cluster (2 subnets across 2 AZs, 1 node) for dev/test cost savings. Overrides subnet count and node count settings."
+  type        = bool
+  default     = false
+}
+
 variable "public_api_server" {
   description = "Whether the cluster API server is publicly accessible. Set to false for a fully private cluster (requires VPN or bastion to run kubectl)."
   type        = bool

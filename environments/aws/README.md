@@ -4,7 +4,7 @@ This blueprint creates an EKS (Elastic Kubernetes Service) cluster on AWS with n
 
 ## What Gets Created
 
-- VPC with 3 private and 3 public subnets across 3 availability zones
+- VPC with 6 subnets (3 private + 3 public) across 3 availability zones, or 4 subnets (2 private + 2 public) across 2 AZs in minimal mode
 - NAT gateway for private subnet internet access
 - VPC endpoints (S3, STS, EC2, ECR, CloudWatch Logs)
 - EKS cluster with managed node group (nodes always in private subnets)
@@ -119,6 +119,7 @@ k8s_version             = "1.34"
 eks_instance_types      = ["m6a.xlarge"]
 public_api_server       = true
 enable_rds              = false
+minimal_cluster         = false
 ```
 
 Once both files are in place, run `make create-cluster` and it will proceed directly to `terraform init` and deployment.
@@ -144,6 +145,7 @@ Once both files are in place, run `make create-cluster` and it will proceed dire
 | `eks_workers_desired_instance_count` | `3` | Desired worker nodes |
 | `enable_spot_instances` | `true` | Use spot instances for cost savings |
 | `public_api_server` | `true` | Make the EKS API server publicly accessible |
+| `minimal_cluster` | `false` | Deploy with 4 subnets across 2 AZs and 1 node for dev/test cost savings |
 | `enable_rds` | `false` | Create RDS PostgreSQL instance |
 | `rds_engine_version` | `"16.11"` | PostgreSQL version |
 | `rds_instance_class` | `"db.r6gd.xlarge"` | RDS instance class |

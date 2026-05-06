@@ -48,6 +48,10 @@ create-cluster:
 		fi; \
 		read -p "Enable RDS PostgreSQL? (true/false) [false]: " ENABLE_RDS; \
 		ENABLE_RDS=$${ENABLE_RDS:-false}; \
+		echo ""; \
+		echo "  Minimal cluster: 2 subnets (2 AZs) and 1 node — ideal for dev/test cost savings."; \
+		read -p "Deploy minimal cluster? (true/false) [false]: " MINIMAL_CLUSTER; \
+		MINIMAL_CLUSTER=$${MINIMAL_CLUSTER:-false}; \
 	fi; \
 	if [ "$$NEED_BACKEND" = "false" ] && [ "$$NEED_TFVARS" = "false" ]; then \
 		echo "Backend and configuration already exist, proceeding with deployment..."; \
@@ -76,7 +80,8 @@ create-cluster:
 			echo "    Cluster name:    $${ENV_NAME}-eks"; \
 			echo "    K8s version:     $$K8S_VERSION"; \
 			echo "    Instance type:   $$INSTANCE_TYPE"; \
-			echo "    Node count:      3-6 (default)"; \
+			echo "    Node count:      $$([ "$$MINIMAL_CLUSTER" = "true" ] && echo "1 (minimal)" || echo "3-6 (default)")"; \
+			echo "    Subnets:         $$([ "$$MINIMAL_CLUSTER" = "true" ] && echo "4 across 2 AZs (minimal)" || echo "6 across 3 AZs (default)")"; \
 			echo "    Spot instances:  enabled (default)"; \
 			echo "    Nodes:           always private (private subnets)"; \
 			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private" || echo "public")"; \
@@ -118,6 +123,7 @@ create-cluster:
 			echo 'eks_instance_types     = ["'$$INSTANCE_TYPE'"]' >> terraform.tfvars; \
 			echo 'public_api_server      = '$$PUBLIC_API >> terraform.tfvars; \
 			echo 'enable_rds             = '$$ENABLE_RDS >> terraform.tfvars; \
+			echo 'minimal_cluster        = '$$MINIMAL_CLUSTER >> terraform.tfvars; \
 			echo "terraform.tfvars generated."; \
 		fi; \
 	fi; \
