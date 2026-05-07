@@ -24,12 +24,25 @@ create-cluster:
 		read -p "Environment name (e.g., dev, staging, prod): " ENV_NAME; \
 		read -p "AWS Region (e.g., us-east-1): " TF_REGION; \
 		TF_REGION=$${TF_REGION:-$$REGION}; \
-		read -p "VPC CIDR [10.84.0.0/20]: " VPC_CIDR; \
+		read -p "VPC CIDR (must be /22 or larger, e.g., 10.84.0.0/22) [10.84.0.0/20]: " VPC_CIDR; \
 		VPC_CIDR=$${VPC_CIDR:-10.84.0.0/20}; \
 		read -p "Kubernetes version [1.34]: " K8S_VERSION; \
 		K8S_VERSION=$${K8S_VERSION:-1.34}; \
-		read -p "Node instance type [m6a.xlarge]: " INSTANCE_TYPE; \
-		INSTANCE_TYPE=$${INSTANCE_TYPE:-m6a.xlarge}; \
+		echo ""; \
+		echo "  Minimal cluster: 2 subnets (2 AZs) and 1 node — ideal for dev/test cost savings."; \
+		read -p "Deploy minimal cluster? (true/false) [false]: " MINIMAL_CLUSTER; \
+		MINIMAL_CLUSTER=$${MINIMAL_CLUSTER:-false}; \
+		echo ""; \
+		if [ "$$MINIMAL_CLUSTER" = "true" ]; then \
+			echo "  Note: Minimal clusters require at least an m6a.4xlarge instance to run all"; \
+			echo "        AtScale components on a single node. Smaller types will likely fail."; \
+			echo ""; \
+			read -p "Node instance type [m6a.4xlarge]: " INSTANCE_TYPE; \
+			INSTANCE_TYPE=$${INSTANCE_TYPE:-m6a.4xlarge}; \
+		else \
+			read -p "Node instance type [m6a.4xlarge]: " INSTANCE_TYPE; \
+			INSTANCE_TYPE=$${INSTANCE_TYPE:-m6a.4xlarge}; \
+		fi; \
 		echo ""; \
 		echo "  Note: EKS nodes run in private subnets."; \
 		echo "        You can choose whether the API server (kubectl endpoint) is public or private."; \
@@ -76,7 +89,8 @@ create-cluster:
 			echo "    Cluster name:    $${ENV_NAME}-eks"; \
 			echo "    K8s version:     $$K8S_VERSION"; \
 			echo "    Instance type:   $$INSTANCE_TYPE"; \
-			echo "    Node count:      3-6 (default)"; \
+			echo "    Node count:      $$([ "$$MINIMAL_CLUSTER" = "true" ] && echo "1 (minimal)" || echo "3-6 (default)")"; \
+			echo "    Subnets:         $$([ "$$MINIMAL_CLUSTER" = "true" ] && echo "4 across 2 AZs (minimal)" || echo "6 across 3 AZs (default)")"; \
 			echo "    Spot instances:  enabled (default)"; \
 			echo "    Nodes:           always private (private subnets)"; \
 			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private" || echo "public")"; \
@@ -118,6 +132,7 @@ create-cluster:
 			echo 'eks_instance_types     = ["'$$INSTANCE_TYPE'"]' >> terraform.tfvars; \
 			echo 'public_api_server      = '$$PUBLIC_API >> terraform.tfvars; \
 			echo 'enable_rds             = '$$ENABLE_RDS >> terraform.tfvars; \
+			echo 'minimal_cluster        = '$$MINIMAL_CLUSTER >> terraform.tfvars; \
 			echo "terraform.tfvars generated."; \
 		fi; \
 	fi; \

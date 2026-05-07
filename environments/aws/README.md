@@ -4,7 +4,7 @@ This blueprint creates an EKS (Elastic Kubernetes Service) cluster on AWS with n
 
 ## What Gets Created
 
-- VPC with 3 private and 3 public subnets across 3 availability zones
+- VPC with 6 subnets (3 private + 3 public) across 3 availability zones, or 4 subnets (2 private + 2 public) across 2 AZs in minimal mode
 - NAT gateway for private subnet internet access
 - VPC endpoints (S3, STS, EC2, ECR, CloudWatch Logs)
 - EKS cluster with managed node group (nodes always in private subnets)
@@ -116,9 +116,10 @@ environment             = "dev"
 region                  = "us-east-1"
 vpc_cidr                = "10.84.0.0/20"
 k8s_version             = "1.34"
-eks_instance_types      = ["m6a.xlarge"]
+eks_instance_types      = ["m6a.4xlarge"]
 public_api_server       = true
 enable_rds              = false
+minimal_cluster         = false
 ```
 
 Once both files are in place, run `make create-cluster` and it will proceed directly to `terraform init` and deployment.
@@ -131,7 +132,7 @@ Once both files are in place, run `make create-cluster` and it will proceed dire
 |----------|-------------|---------|
 | `environment` | Environment name | `"dev"` |
 | `region` | AWS region | `"us-east-1"` |
-| `vpc_cidr` | VPC CIDR block | `"10.84.0.0/22"` |
+| `vpc_cidr` | VPC CIDR block. Must be `/22` or larger and a valid network address (no host bits set). | `"10.84.0.0/22"` |
 
 **Optional variables** (have sensible defaults):
 
@@ -144,6 +145,7 @@ Once both files are in place, run `make create-cluster` and it will proceed dire
 | `eks_workers_desired_instance_count` | `3` | Desired worker nodes |
 | `enable_spot_instances` | `true` | Use spot instances for cost savings |
 | `public_api_server` | `true` | Make the EKS API server publicly accessible |
+| `minimal_cluster` | `false` | Deploy with 4 subnets across 2 AZs and 1 node for dev/test cost savings. Requires at least `m6a.4xlarge` — all AtScale components must fit on a single node. |
 | `enable_rds` | `false` | Create RDS PostgreSQL instance |
 | `rds_engine_version` | `"16.11"` | PostgreSQL version |
 | `rds_instance_class` | `"db.r6gd.xlarge"` | RDS instance class |
@@ -229,3 +231,16 @@ Or manually: `terraform destroy`
 - Ensure your AWS credentials have sufficient permissions
 - If facing spot instance availability issues, set `enable_spot_instances = false`
 - Check the AWS Console for resource status or review Terraform output for errors
+
+### VPC CIDR requirements
+
+The `vpc_cidr` must meet two conditions:
+
+1. **Minimum size `/22`** — the subnets are carved as `/prefix+3` blocks. A `/22` produces `/25` subnets (123 usable IPs each). Smaller CIDRs like `/23` or `/24` leave too few IPs for EKS nodes and pods (AWS VPC CNI assigns a VPC IP to every pod).
+2. **Valid network address** — the host bits must be zero. For example, `10.230.187.0/22` is invalid because 187 is not aligned to a `/22` boundary; the correct address is `10.230.184.0/22` (184 is the nearest multiple of 4).
+
+Terraform will reject invalid values at plan time with a descriptive error message.
+
+### Minimal cluster instance type
+
+When `minimal_cluster = true`, all AtScale components are scheduled on a single node. An `m6a.4xlarge` (16 vCPU / 64 GB RAM) is the recommended minimum. Smaller instance types will likely result in pods stuck in `Pending` due to insufficient resources.

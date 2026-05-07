@@ -12,11 +12,19 @@ variable "environment" {
 }
 
 variable "vpc_cidr" {
-  description = "VPC CIDR block (e.g., 10.84.0.0/22)"
+  description = "VPC CIDR block (e.g., 10.84.0.0/22). Must be /22 or larger to ensure enough IPs for EKS nodes and pods."
   type        = string
   validation {
     condition     = can(cidrhost(var.vpc_cidr, 0))
     error_message = "Must be a valid CIDR block (e.g., 10.84.0.0/22)."
+  }
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr, 0)) && tonumber(split("/", var.vpc_cidr)[1]) <= 22
+    error_message = "VPC CIDR must be /22 or larger (e.g., /22, /21, /20). Smaller ranges do not provide enough IPs for EKS nodes and pods."
+  }
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr, 0)) && var.vpc_cidr == "${cidrhost(var.vpc_cidr, 0)}/${split("/", var.vpc_cidr)[1]}"
+    error_message = "VPC CIDR has host bits set — it is not a valid network address. Use the network address (e.g., 10.230.184.0/22 instead of 10.230.187.0/22)."
   }
 }
 
@@ -79,6 +87,12 @@ variable "enable_spot_instances" {
   description = "Whether to use EC2 spot instances for cost savings. Disable if facing availability issues."
   type        = bool
   default     = true
+}
+
+variable "minimal_cluster" {
+  description = "Deploy a minimal cluster (2 subnets across 2 AZs, 1 node) for dev/test cost savings. Overrides subnet count and node count settings."
+  type        = bool
+  default     = false
 }
 
 variable "public_api_server" {

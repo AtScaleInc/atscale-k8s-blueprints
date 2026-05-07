@@ -4,17 +4,23 @@ locals {
   ############################################################################
   # Networking CIDR Variables
   # Calculated subnet CIDRs (do not edit)
-  # Creates 3 private subnets and 3 public subnets from the VPC CIDR
+  # Creates 6 subnets (3 private + 3 public) across 3 AZs by default, or 4 (2 private + 2 public) across 2 AZs in minimal mode
   ############################################################################
-  private_subnet_cidrs = [
+  private_subnet_cidrs = var.minimal_cluster ? [
     cidrsubnet(var.vpc_cidr, 3, 0),
     cidrsubnet(var.vpc_cidr, 3, 1),
-    cidrsubnet(var.vpc_cidr, 3, 2)
+    ] : [
+    cidrsubnet(var.vpc_cidr, 3, 0),
+    cidrsubnet(var.vpc_cidr, 3, 1),
+    cidrsubnet(var.vpc_cidr, 3, 2),
   ]
-  public_subnet_cidrs = [
+  public_subnet_cidrs = var.minimal_cluster ? [
     cidrsubnet(var.vpc_cidr, 3, 4),
     cidrsubnet(var.vpc_cidr, 3, 5),
-    cidrsubnet(var.vpc_cidr, 3, 6)
+    ] : [
+    cidrsubnet(var.vpc_cidr, 3, 4),
+    cidrsubnet(var.vpc_cidr, 3, 5),
+    cidrsubnet(var.vpc_cidr, 3, 6),
   ]
 }
 
@@ -48,9 +54,9 @@ module "eks" {
   eks_ami_type                       = "AL2023_x86_64_STANDARD"
   eks_instance_types                 = var.eks_instance_types
   enable_spot_instances              = var.enable_spot_instances
-  eks_workers_min_instance_count     = var.eks_workers_min_instance_count
-  eks_workers_max_instance_count     = var.eks_workers_max_instance_count
-  eks_workers_desired_instance_count = var.eks_workers_desired_instance_count
+  eks_workers_min_instance_count     = var.minimal_cluster ? 1 : var.eks_workers_min_instance_count
+  eks_workers_max_instance_count     = var.minimal_cluster ? 1 : var.eks_workers_max_instance_count
+  eks_workers_desired_instance_count = var.minimal_cluster ? 1 : var.eks_workers_desired_instance_count
   vpc_access_cidr                    = [module.vpc.vpc_cidr]
   enable_private_cluster             = !var.public_api_server
   kms_admin_role                     = var.kms_admin_role
