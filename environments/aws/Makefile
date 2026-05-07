@@ -24,12 +24,25 @@ create-cluster:
 		read -p "Environment name (e.g., dev, staging, prod): " ENV_NAME; \
 		read -p "AWS Region (e.g., us-east-1): " TF_REGION; \
 		TF_REGION=$${TF_REGION:-$$REGION}; \
-		read -p "VPC CIDR [10.84.0.0/20]: " VPC_CIDR; \
+		read -p "VPC CIDR (must be /22 or larger, e.g., 10.84.0.0/22) [10.84.0.0/20]: " VPC_CIDR; \
 		VPC_CIDR=$${VPC_CIDR:-10.84.0.0/20}; \
 		read -p "Kubernetes version [1.34]: " K8S_VERSION; \
 		K8S_VERSION=$${K8S_VERSION:-1.34}; \
-		read -p "Node instance type [m6a.xlarge]: " INSTANCE_TYPE; \
-		INSTANCE_TYPE=$${INSTANCE_TYPE:-m6a.xlarge}; \
+		echo ""; \
+		echo "  Minimal cluster: 2 subnets (2 AZs) and 1 node — ideal for dev/test cost savings."; \
+		read -p "Deploy minimal cluster? (true/false) [false]: " MINIMAL_CLUSTER; \
+		MINIMAL_CLUSTER=$${MINIMAL_CLUSTER:-false}; \
+		echo ""; \
+		if [ "$$MINIMAL_CLUSTER" = "true" ]; then \
+			echo "  Note: Minimal clusters require at least an m6a.4xlarge instance to run all"; \
+			echo "        AtScale components on a single node. Smaller types will likely fail."; \
+			echo ""; \
+			read -p "Node instance type [m6a.4xlarge]: " INSTANCE_TYPE; \
+			INSTANCE_TYPE=$${INSTANCE_TYPE:-m6a.4xlarge}; \
+		else \
+			read -p "Node instance type [m6a.4xlarge]: " INSTANCE_TYPE; \
+			INSTANCE_TYPE=$${INSTANCE_TYPE:-m6a.4xlarge}; \
+		fi; \
 		echo ""; \
 		echo "  Note: EKS nodes run in private subnets."; \
 		echo "        You can choose whether the API server (kubectl endpoint) is public or private."; \
@@ -48,10 +61,6 @@ create-cluster:
 		fi; \
 		read -p "Enable RDS PostgreSQL? (true/false) [false]: " ENABLE_RDS; \
 		ENABLE_RDS=$${ENABLE_RDS:-false}; \
-		echo ""; \
-		echo "  Minimal cluster: 2 subnets (2 AZs) and 1 node — ideal for dev/test cost savings."; \
-		read -p "Deploy minimal cluster? (true/false) [false]: " MINIMAL_CLUSTER; \
-		MINIMAL_CLUSTER=$${MINIMAL_CLUSTER:-false}; \
 	fi; \
 	if [ "$$NEED_BACKEND" = "false" ] && [ "$$NEED_TFVARS" = "false" ]; then \
 		echo "Backend and configuration already exist, proceeding with deployment..."; \
