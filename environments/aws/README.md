@@ -10,6 +10,7 @@ This blueprint creates an EKS (Elastic Kubernetes Service) cluster on AWS with n
 - EKS cluster with managed node group (nodes always in private subnets)
 - EFS file system with mount targets in all private subnets
 - Kubernetes StorageClasses (EFS and EBS)
+- AWS Load Balancer Controller (via Helm) for NLB/ALB management
 - IAM roles for IRSA and service access
 - Optional: RDS PostgreSQL Multi-AZ cluster with RDS Proxy
 
@@ -75,6 +76,10 @@ terraform {
       source  = "gavinbunney/kubectl"
       version = "1.19.0"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.17"
+    }
     null = {
       source  = "hashicorp/null"
       version = "3.2.4"
@@ -103,6 +108,18 @@ provider "kubectl" {
     api_version = "client.authentication.k8s.io/v1beta1"
     args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.region, "--profile", "<YOUR_AWS_PROFILE>"]
     command     = "aws"
+  }
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.region, "--profile", "<YOUR_AWS_PROFILE>"]
+      command     = "aws"
+    }
   }
 }
 ```
