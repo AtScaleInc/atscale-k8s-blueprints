@@ -17,13 +17,13 @@ check_command() {
   if command -v "$cmd" >/dev/null 2>&1; then
     local version
     if [ "$cmd" = "kubectl" ]; then
-      version=$("$cmd" version --client 2>&1 | head -1)
+      version=$("$cmd" version --client 2>&1 | head -1 || true)
     elif [ "$cmd" = "az" ]; then
       version="Azure CLI $(az version 2>&1 | jq -r '.["azure-cli"]' 2>/dev/null || echo 'unknown')"
     elif [ "$cmd" = "kubelogin" ]; then
       version=$("$cmd" --version 2>&1 | grep "git hash" | sed 's/git hash: //' | cut -d'/' -f1 || echo 'unknown')
     else
-      version=$("$cmd" --version 2>&1 | head -1)
+      version=$("$cmd" --version 2>&1 | head -1 || true)
     fi
     echo "  [OK] $name ($version)"
   else
@@ -41,7 +41,7 @@ check_command "git" "git" "https://git-scm.com/downloads"
 
 # Terraform version check
 if command -v terraform >/dev/null 2>&1; then
-  TF_VERSION=$(terraform version -json 2>/dev/null | jq -r '.terraform_version' 2>/dev/null || terraform version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+  TF_VERSION=$(terraform version -json 2>/dev/null | jq -r '.terraform_version' 2>/dev/null || { terraform version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true; })
   TF_MAJOR=$(echo "$TF_VERSION" | cut -d. -f1)
   TF_MINOR=$(echo "$TF_VERSION" | cut -d. -f2)
   if [ "$TF_MAJOR" -lt 1 ] || ([ "$TF_MAJOR" -eq 1 ] && [ "$TF_MINOR" -lt 11 ]); then
