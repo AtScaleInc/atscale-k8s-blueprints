@@ -63,3 +63,21 @@ variable "enable_private_cluster" {
   type        = bool
   default     = false
 }
+
+variable "pod_cidr" {
+  description = "CIDR used for pod IPs with Azure CNI overlay. Must not overlap the VNet address space."
+  type        = string
+  default     = "10.244.0.0/16"
+}
+
+variable "service_cidr" {
+  description = "CIDR used for Kubernetes service IPs. Must not overlap the VNet address space or pod_cidr."
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "dns_service_ip" {
+  description = "IP address of the cluster DNS service. Must be inside service_cidr."
+  type        = string
+  default     = "10.0.0.10"
+}

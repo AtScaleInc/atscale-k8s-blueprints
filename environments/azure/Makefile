@@ -27,8 +27,8 @@ create-cluster:
 		read -p "Resource group name: " RESOURCE_GROUP; \
 		read -p "VNet CIDR (e.g., 10.85.0.0/22): " VPC_CIDR; \
 		read -p "AAD admin group object ID: " AAD_GROUP; \
-		read -p "Kubernetes version [1.31]: " K8S_VERSION; \
-		K8S_VERSION=$${K8S_VERSION:-1.31}; \
+		read -p "Kubernetes version [1.34]: " K8S_VERSION; \
+		K8S_VERSION=$${K8S_VERSION:-1.34}; \
 		read -p "Node VM size [Standard_D8s_v5]: " VM_SIZE; \
 		VM_SIZE=$${VM_SIZE:-Standard_D8s_v5}; \
 		echo ""; \
