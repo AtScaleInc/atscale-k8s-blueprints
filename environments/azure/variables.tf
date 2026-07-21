@@ -45,7 +45,7 @@ variable "resource_group_name" {
 variable "aks_version" {
   description = "Kubernetes version for AKS"
   type        = string
-  default     = "1.31"
+  default     = "1.34"
 }
 
 variable "aks_node_count" {

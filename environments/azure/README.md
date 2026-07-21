@@ -62,7 +62,7 @@ All configuration is managed through `terraform.tfvars`. The Makefile generates 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `aks_version` | `"1.31"` | AKS Kubernetes version |
+| `aks_version` | `"1.34"` | AKS Kubernetes version |
 | `aks_node_count` | `3` | Number of worker nodes |
 | `aks_node_size` | `"Standard_D8s_v5"` | VM size for nodes |
 | `public_api_server` | `true` | Make the AKS API server publicly accessible |
