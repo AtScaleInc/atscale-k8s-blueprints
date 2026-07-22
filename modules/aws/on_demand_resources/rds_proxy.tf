@@ -28,7 +28,8 @@ resource "aws_db_proxy" "rds_proxy" {
     aws_iam_role.rds_proxy_role,
     aws_secretsmanager_secret_version.rds_credentials,
     aws_secretsmanager_secret.rds_credentials,
-    aws_rds_cluster.primary
+    aws_rds_cluster.primary,
+    aws_db_instance.primary
   ]
 }
 
@@ -45,13 +46,16 @@ resource "aws_db_proxy_default_target_group" "rds_proxy_primary_target_group" {
 resource "aws_db_proxy_target" "rds_proxy_target" {
   count = var.enable_rds ? 1 : 0
 
-  db_cluster_identifier = aws_rds_cluster.primary[0].cluster_identifier
-  db_proxy_name         = aws_db_proxy.rds_proxy[0].name
-  target_group_name     = aws_db_proxy_default_target_group.rds_proxy_primary_target_group[0].name
+  db_cluster_identifier  = local.rds_mode == "cluster" ? aws_rds_cluster.primary[0].cluster_identifier : null
+  db_instance_identifier = local.rds_mode == "instance" ? aws_db_instance.primary[0].identifier : null
+  db_proxy_name          = aws_db_proxy.rds_proxy[0].name
+  target_group_name      = aws_db_proxy_default_target_group.rds_proxy_primary_target_group[0].name
 }
 
+# Read-only endpoint only makes sense when a reader exists (cluster mode has
+# 2 readers; a Multi-AZ instance's standby is not independently readable).
 resource "aws_db_proxy_endpoint" "rds_proxy_endpoint" {
-  count                  = var.enable_rds ? 1 : 0
+  count                  = var.enable_rds && local.rds_mode == "cluster" ? 1 : 0
   db_proxy_name          = aws_db_proxy.rds_proxy[0].name
   db_proxy_endpoint_name = "${var.rds_identifier}-proxy-ro-endpoint"
   vpc_subnet_ids         = var.private_subnets
