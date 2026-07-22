@@ -53,6 +53,15 @@ make check-prerequisites-gcp
 make check-prerequisites-azure
 ```
 
+If your AWS credentials use a named CLI profile, pass it via `AWS_PROFILE`:
+
+```sh
+make check-prerequisites-aws AWS_PROFILE=my-profile
+# or
+export AWS_PROFILE=my-profile
+make check-prerequisites-aws
+```
+
 Common requirements:
 
 - **Terraform >= 1.11.0** - [Install](https://www.terraform.io/downloads)

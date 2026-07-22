@@ -33,7 +33,7 @@ delete-cluster-aws:
 	@$(MAKE) -C environments/aws delete-cluster
 
 check-prerequisites-aws:
-	@bash scripts/check-prerequisites.sh aws
+	@bash scripts/check-prerequisites.sh aws "$(AWS_PROFILE)"
 
 # Google Cloud
 create-cluster-gcp: check-prerequisites-gcp
