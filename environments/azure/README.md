@@ -8,6 +8,7 @@ This blueprint creates an AKS (Azure Kubernetes Service) cluster on Azure with n
 - AKS cluster with RBAC and Azure AD integration (nodes always in private subnets)
 - Log Analytics workspace
 - Network Security Groups
+- Gateway API and Application Gateway for Containers add-ons, so the cluster can serve ingress out of the box (see [Ingress gateway](#ingress-gateway))
 - Optional: Azure PostgreSQL Flexible Server with private networking
 
 ## Prerequisites
@@ -18,10 +19,29 @@ This blueprint creates an AKS (Azure Kubernetes Service) cluster on Azure with n
 4. **Make** - Pre-installed on macOS/Linux
 5. **kubectl** - [Install](https://kubernetes.io/docs/tasks/tools/)
 
+6. **Preview features for the ingress gateway add-ons** (only if `enable_ingress_gateway = true`, which is the default):
+
+```sh
+az feature register --namespace Microsoft.ContainerService --name ManagedGatewayAPIPreview
+az feature register --namespace Microsoft.ContainerService --name ApplicationLoadBalancerPreview
+az provider register --namespace Microsoft.NetworkFunction
+az provider register --namespace Microsoft.ServiceNetworking
+
+# Registration is asynchronous. Wait until both report "Registered":
+az feature show --namespace Microsoft.ContainerService --name ManagedGatewayAPIPreview --query properties.state -o tsv
+az feature show --namespace Microsoft.ContainerService --name ApplicationLoadBalancerPreview --query properties.state -o tsv
+
+# Then propagate the feature registrations:
+az provider register --namespace Microsoft.ContainerService
+```
+
 Verify prerequisites:
 ```sh
 bash ../../scripts/check-prerequisites.sh azure
 ```
+
+The prerequisites script checks these registrations and fails with the exact
+commands to run if any are missing.
 
 ## Quick Start
 
@@ -67,6 +87,7 @@ All configuration is managed through `terraform.tfvars`. The Makefile generates 
 | `aks_node_size` | `"Standard_D8s_v5"` | VM size for nodes |
 | `public_api_server` | `true` | Make the AKS API server publicly accessible |
 | `authorized_network_cidr` | `""` | CIDR allowed to reach the API server when `public_api_server = false` |
+| `enable_ingress_gateway` | `true` | Enable the Gateway API and Application Gateway for Containers add-ons (**preview** - see below) |
 | `enable_postgresql` | `false` | Create PostgreSQL Flexible Server |
 | `postgresql_version` | `"16"` | PostgreSQL version |
 | `postgresql_sku_name` | `"GP_Standard_D4ads_v5"` | PostgreSQL SKU |
@@ -86,6 +107,40 @@ AKS nodes always run in private subnets. The API server (used by `kubectl`) can 
 | `false` | API server reachable only from within the VNet; requires VPN or bastion host to run `kubectl` |
 
 When setting `public_api_server = false`, set `authorized_network_cidr` to your VPN or office CIDR so those networks can reach the private endpoint.
+
+## Ingress Gateway
+
+With `enable_ingress_gateway = true` (the default), the cluster is created with
+two add-ons so it can serve ingress without any further installation:
+
+- **Managed Gateway API** - Azure installs and maintains the Gateway API CRDs.
+- **Application Gateway for Containers (ALB) controller** - translates Gateway
+  API and Ingress resources into Azure load balancing rules.
+
+Enabling the ALB controller also turns on **workload identity**, which the
+add-on requires to authenticate its controller.
+
+After the cluster is up, confirm the add-ons are running:
+
+```sh
+kubectl get pods -n kube-system | grep alb-controller
+kubectl get gatewayclass azure-alb-external
+```
+
+Both add-ons are currently **in preview**:
+
+- They require the subscription-level registrations listed under
+  [Prerequisites](#prerequisites).
+- Application Gateway for Containers is not available in every region. Check
+  the [supported regions](https://learn.microsoft.com/azure/application-gateway/for-containers/overview#supported-regions)
+  before choosing `region` - the add-on will enable anywhere, but provisioning
+  the gateway resources fails in unsupported regions.
+- Preview APIs can change between releases. The API version used to enable the
+  ALB add-on is pinned in `alb_addon_api_version` so it can be moved forward
+  without editing module code.
+
+To deploy without them, set `enable_ingress_gateway = false`. The cluster is
+then created exactly as before and you can install your own ingress controller.
 
 ## Accessing the Cluster
 

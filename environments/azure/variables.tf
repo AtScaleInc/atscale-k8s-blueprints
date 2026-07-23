@@ -77,6 +77,12 @@ variable "authorized_network_cidr" {
   default     = ""
 }
 
+variable "enable_ingress_gateway" {
+  description = "Provision the cluster ready to serve ingress via Gateway API, by enabling the AKS-managed Gateway API installation and the Application Gateway for Containers (ALB) controller add-on. Both are in PREVIEW and require subscription-level feature registration - see the README prerequisites before enabling."
+  type        = bool
+  default     = true
+}
+
 ############################################################################
 # Database Variables
 ############################################################################

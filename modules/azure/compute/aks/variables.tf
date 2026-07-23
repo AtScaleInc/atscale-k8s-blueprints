@@ -81,3 +81,21 @@ variable "dns_service_ip" {
   type        = string
   default     = "10.0.0.10"
 }
+
+variable "enable_gateway_api" {
+  description = "Enable the AKS-managed Gateway API installation. Required by the Application Gateway for Containers ALB controller add-on. PREVIEW: requires the ManagedGatewayAPIPreview feature to be registered on the subscription."
+  type        = bool
+  default     = true
+}
+
+variable "enable_application_load_balancer" {
+  description = "Enable the Application Gateway for Containers ALB controller add-on, so the cluster can serve ingress via Gateway API. Also turns on workload identity, which the add-on requires. PREVIEW: requires the ApplicationLoadBalancerPreview feature and the Microsoft.NetworkFunction / Microsoft.ServiceNetworking providers to be registered on the subscription."
+  type        = bool
+  default     = true
+}
+
+variable "alb_addon_api_version" {
+  description = "API version used to patch the applicationLoadBalancer add-on onto the cluster. Must be a version that exposes the property; while the add-on is in preview this has to be a -preview version."
+  type        = string
+  default     = "2025-09-02-preview"
+}

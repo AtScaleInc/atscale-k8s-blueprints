@@ -41,6 +41,14 @@ create-cluster:
 		if [ "$$PUBLIC_API" = "false" ]; then \
 			read -p "CIDR allowed to access the private API server (e.g., 10.0.0.0/8): " AUTHORIZED_CIDR; \
 		fi; \
+		echo ""; \
+		echo "  Note: the ingress gateway add-ons (Gateway API + Application Gateway"; \
+		echo "        for Containers) let the cluster serve ingress out of the box."; \
+		echo "        They are in PREVIEW and need preview features registered on the"; \
+		echo "        subscription - see the README prerequisites."; \
+		echo ""; \
+		read -p "Enable ingress gateway add-ons? (true/false) [true]: " ENABLE_INGRESS; \
+		ENABLE_INGRESS=$${ENABLE_INGRESS:-true}; \
 		read -p "Enable PostgreSQL? (true/false) [false]: " ENABLE_PG; \
 		ENABLE_PG=$${ENABLE_PG:-false}; \
 	fi; \
@@ -77,6 +85,7 @@ create-cluster:
 			echo "    Node count:      3 (default)"; \
 			echo "    Nodes:           always private (private subnets)"; \
 			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private (CIDR: $$AUTHORIZED_CIDR)" || echo "public")"; \
+			echo "    Ingress gateway: $$([ "$$ENABLE_INGRESS" = "false" ] && echo "no" || echo "yes (Gateway API + ALB controller, preview)")"; \
 			echo ""; \
 			echo "  Database (PostgreSQL Flexible Server):"; \
 			if [ "$$ENABLE_PG" = "true" ]; then \
@@ -118,6 +127,7 @@ create-cluster:
 			echo 'aks_node_size              = "'$$VM_SIZE'"' >> terraform.tfvars; \
 			echo 'public_api_server          = '$$PUBLIC_API >> terraform.tfvars; \
 			echo 'authorized_network_cidr    = "'$$AUTHORIZED_CIDR'"' >> terraform.tfvars; \
+			echo 'enable_ingress_gateway     = '$$ENABLE_INGRESS >> terraform.tfvars; \
 			echo 'enable_postgresql          = '$$ENABLE_PG >> terraform.tfvars; \
 			echo "terraform.tfvars generated."; \
 		fi; \

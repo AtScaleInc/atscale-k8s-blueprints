@@ -46,6 +46,8 @@ module "aks" {
   default_node_pool_vm_size            = var.aks_node_size
   aks_subnet_id                        = module.networking.aks_subnet_id
   enable_private_cluster               = !var.public_api_server
+  enable_gateway_api                   = var.enable_ingress_gateway
+  enable_application_load_balancer     = var.enable_ingress_gateway
 }
 
 # Azure PostgreSQL Flexible Server
