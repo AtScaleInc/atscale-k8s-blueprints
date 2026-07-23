@@ -4,6 +4,10 @@ data "azurerm_resource_group" "this" {
 
 data "azurerm_client_config" "current" {}
 
+locals {
+  cluster_name = "${var.cluster_name}${random_string.cluster_suffix.result}"
+}
+
 # The previous module appended a random suffix to the cluster name via
 # `cluster_name_random_suffix`. The AVM module has no equivalent, so we
 # generate the suffix ourselves to keep cluster naming behaviour unchanged.
@@ -30,7 +34,7 @@ module "aks" {
   source  = "Azure/avm-res-containerservice-managedcluster/azurerm"
   version = "0.6.7"
 
-  name       = "${var.cluster_name}${random_string.cluster_suffix.result}"
+  name       = local.cluster_name
   location   = var.location
   parent_id  = data.azurerm_resource_group.this.id
   dns_prefix = var.prefix
@@ -54,6 +58,18 @@ module "aks" {
   oidc_issuer_profile = {
     enabled = true
   }
+
+  # Workload identity is a hard prerequisite of the Application Gateway for
+  # Containers ALB controller add-on, which authenticates its controller via a
+  # federated credential on the `alb-controller-sa` service account.
+  security_profile = {
+    workload_identity = {
+      enabled = var.enable_application_load_balancer
+    }
+  }
+
+  # ingress_profile is deliberately not set here — both add-ons are applied by
+  # the azapi patch below. See the comment on that resource.
 
   api_server_access_profile = {
     enable_private_cluster = var.enable_private_cluster
@@ -105,4 +121,53 @@ resource "azurerm_role_assignment" "aks_network_contributor_on_vnet" {
   scope                = var.aks_subnet_id
   role_definition_name = "Network Contributor"
   principal_id         = module.aks.identity_principal_id
+}
+
+# Ingress gateway add-ons: managed Gateway API + Application Gateway for
+# Containers (ALB) controller.
+#
+# Both are applied here rather than through the AVM module because:
+#
+#   1. The module has no input for `ingressProfile.applicationLoadBalancer` at
+#      all (checked against 0.6.7 and upstream main), so the ALB add-on cannot
+#      be expressed through it.
+#   2. The module does expose `ingress_profile.gateway_api`, but setting it
+#      without also setting `web_app_routing` trips a bug in its own validation
+#      (`coalesce(try(...web_app_routing...), "")` errors when web_app_routing
+#      is null). Keeping both add-ons together avoids the workaround and keeps
+#      one coherent ingress configuration.
+#
+# This does not fight the module: it filters null properties out of the request
+# body, so with `ingress_profile` unset it never sends `ingressProfile` and
+# will not revert this patch on subsequent applies.
+#
+# Pinned to a preview API version on purpose — the properties are gated behind
+# preview feature flags and are not accepted by the GA API version the module
+# uses. Move `alb_addon_api_version` forward once the add-ons go GA.
+resource "azapi_update_resource" "ingress_profile" {
+  count = var.enable_gateway_api || var.enable_application_load_balancer ? 1 : 0
+
+  name      = local.cluster_name
+  parent_id = data.azurerm_resource_group.this.id
+  type      = "Microsoft.ContainerService/managedClusters@${var.alb_addon_api_version}"
+
+  body = {
+    properties = {
+      ingressProfile = merge(
+        var.enable_gateway_api ? { gatewayAPI = { installation = "Standard" } } : {},
+        var.enable_application_load_balancer ? { applicationLoadBalancer = { enabled = true } } : {},
+      )
+    }
+  }
+
+  # Serialise against the cluster so the patch cannot race a module-driven
+  # update, matching how the AVM module guards its own in-place updates.
+  locks = [module.aks.resource_id]
+
+  lifecycle {
+    precondition {
+      condition     = !var.enable_application_load_balancer || var.enable_gateway_api
+      error_message = "enable_application_load_balancer requires enable_gateway_api: the ALB controller add-on only works with the AKS-managed Gateway API installation."
+    }
+  }
 }

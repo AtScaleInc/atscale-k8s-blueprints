@@ -94,6 +94,35 @@ case "$PROVIDER" in
       if az account show >/dev/null 2>&1; then
         SUBSCRIPTION=$(az account show --query name -o tsv 2>/dev/null)
         echo "  [OK] Azure authenticated (subscription: $SUBSCRIPTION)"
+
+        # The ingress gateway add-ons (Gateway API + Application Gateway for
+        # Containers) are in preview. Without these registrations the cluster
+        # create fails part-way through with an opaque ARM error, so check up
+        # front and tell the user exactly what to run.
+        for FEATURE in ManagedGatewayAPIPreview ApplicationLoadBalancerPreview; do
+          STATE=$(az feature show --namespace Microsoft.ContainerService --name "$FEATURE" --query properties.state -o tsv 2>/dev/null)
+          if [ "$STATE" = "Registered" ]; then
+            echo "  [OK] Preview feature $FEATURE registered"
+          else
+            echo "  [MISSING] Preview feature $FEATURE is '${STATE:-NotRegistered}' - required for the ingress gateway add-ons."
+            echo "            Run: az feature register --namespace Microsoft.ContainerService --name $FEATURE"
+            echo "            Then wait for it to report Registered and run: az provider register --namespace Microsoft.ContainerService"
+            echo "            Or set enable_ingress_gateway = false to deploy without them."
+            ERRORS=$((ERRORS + 1))
+          fi
+        done
+
+        for RP in Microsoft.NetworkFunction Microsoft.ServiceNetworking; do
+          STATE=$(az provider show --namespace "$RP" --query registrationState -o tsv 2>/dev/null)
+          if [ "$STATE" = "Registered" ]; then
+            echo "  [OK] Resource provider $RP registered"
+          else
+            echo "  [MISSING] Resource provider $RP is '${STATE:-NotRegistered}' - required for the ingress gateway add-ons."
+            echo "            Run: az provider register --namespace $RP"
+            echo "            Or set enable_ingress_gateway = false to deploy without them."
+            ERRORS=$((ERRORS + 1))
+          fi
+        done
       else
         echo "  [MISSING] Azure not authenticated - run: az login"
         ERRORS=$((ERRORS + 1))
