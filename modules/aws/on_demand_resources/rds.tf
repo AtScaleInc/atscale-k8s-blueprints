@@ -1,6 +1,12 @@
-# RDS Multi-AZ DB Cluster
+locals {
+  # Multi-AZ DB Cluster (non-Aurora) requires >= 3 AZs. With exactly 2 subnets,
+  # fall back to a classic Multi-AZ DB instance (1 primary + 1 standby).
+  rds_mode = length(var.private_subnets) >= 3 ? "cluster" : "instance"
+}
+
+# RDS Multi-AZ DB Cluster (3+ AZs)
 resource "aws_rds_cluster" "primary" {
-  count = var.enable_rds ? 1 : 0
+  count = var.enable_rds && local.rds_mode == "cluster" ? 1 : 0
 
   cluster_identifier                  = var.rds_identifier
   engine                              = var.rds_engine
@@ -36,6 +42,47 @@ resource "aws_rds_cluster" "primary" {
   })
 }
 
+# RDS Multi-AZ DB Instance (2 AZs, e.g. minimal_cluster)
+resource "aws_db_instance" "primary" {
+  count = var.enable_rds && local.rds_mode == "instance" ? 1 : 0
+
+  identifier     = var.rds_identifier
+  engine         = var.rds_engine
+  engine_version = var.rds_engine_version
+  instance_class = var.rds_instance_class_instance_mode
+  multi_az       = true
+
+  allocated_storage = var.rds_allocated_storage
+  storage_type      = "io2"
+  iops              = 5000
+
+  db_name  = var.rds_db_name
+  username = var.rds_username
+  password = random_password.rds_password[0].result
+  port     = var.rds_port
+
+  apply_immediately                   = true
+  iam_database_authentication_enabled = false
+  # parameter_group_name intentionally omitted -> AWS attaches its default
+  # (e.g. default.postgres16). The cluster mode's "rds-parameter-group" is a
+  # DB CLUSTER parameter group and is not valid here (separate AWS namespace).
+
+  vpc_security_group_ids = [aws_security_group.rds_sg[0].id]
+  db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group[0].name
+
+  backup_retention_period = 1
+  backup_window           = "03:00-06:00"
+  maintenance_window      = "Mon:00:00-Mon:03:00"
+
+  skip_final_snapshot = true
+  deletion_protection = var.deletion_protection
+
+  tags = merge(var.tags, {
+    Name = "${var.rds_identifier}-instance"
+    Type = "rds-multi-az-instance"
+  })
+}
+
 # DB Subnet Group for the cluster
 resource "aws_db_subnet_group" "rds_subnet_group" {
   count = var.enable_rds ? 1 : 0
@@ -52,11 +99,7 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
 resource "random_password" "rds_password" {
   count            = var.enable_rds ? 1 : 0
   length           = 16
-  special          = true
-  override_special = "!#$%&*"
-  lifecycle {
-    ignore_changes = all
-  }
+  special          = false
 }
 
 resource "aws_secretsmanager_secret" "rds_credentials" {

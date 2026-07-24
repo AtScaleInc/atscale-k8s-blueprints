@@ -6,15 +6,15 @@ output "rds_proxy_endpoint" {
 
 output "rds_instance_database" {
   description = "The database name of the primary RDS instance"
-  value       = var.enable_rds ? aws_rds_cluster.primary[0].database_name : null
+  value       = var.enable_rds ? var.rds_db_name : null
 }
 
 output "rds_instance_username" {
   description = "The username of the primary RDS instance"
-  value       = var.enable_rds ? aws_rds_cluster.primary[0].master_username : null
+  value       = var.enable_rds ? var.rds_username : null
 }
 
 output "rds_instance_password" {
   description = "The password of the primary RDS instance"
-  value       = var.enable_rds ? aws_rds_cluster.primary[0].master_password : null
+  value       = var.enable_rds ? random_password.rds_password[0].result : null
 }

@@ -31,6 +31,11 @@ variable "rds_instance_class" {
   type        = string
 }
 
+variable "rds_instance_class_instance_mode" {
+  description = "RDS instance class for the 2-AZ Multi-AZ DB instance fallback (used when only 2 private subnets are provided, e.g. minimal_cluster)."
+  type        = string
+}
+
 variable "rds_allocated_storage" {
   description = "The allocated storage for the RDS instance in GiB."
   type        = number
@@ -77,6 +82,11 @@ variable "eks_cluster_sg_id" {
 variable "private_subnets" {
   description = "EKS Private Subnets"
   type        = list(string)
+
+  validation {
+    condition     = !var.enable_rds || length(var.private_subnets) >= 2
+    error_message = "RDS requires at least 2 private subnets across 2 distinct AZs when enable_rds is true (got ${length(var.private_subnets)}). Provide 2 subnets for a Multi-AZ DB instance (minimal_cluster = true) or 3+ subnets for a Multi-AZ DB cluster."
+  }
 }
 
 variable "public_subnets" {

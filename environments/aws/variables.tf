@@ -138,6 +138,12 @@ variable "rds_instance_class" {
   default     = "db.r6gd.xlarge"
 }
 
+variable "rds_instance_class_instance_mode" {
+  description = "RDS instance class for the 2-AZ Multi-AZ DB instance fallback (used when minimal_cluster produces only 2 subnets)"
+  type        = string
+  default     = "db.r6g.xlarge"
+}
+
 variable "rds_allocated_storage" {
   description = "RDS allocated storage in GB"
   type        = number

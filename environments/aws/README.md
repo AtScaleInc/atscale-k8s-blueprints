@@ -12,7 +12,7 @@ This blueprint creates an EKS (Elastic Kubernetes Service) cluster on AWS with n
 - Kubernetes StorageClasses (EFS and EBS)
 - AWS Load Balancer Controller (via Helm) for NLB/ALB management
 - IAM roles for IRSA and service access
-- Optional: RDS PostgreSQL Multi-AZ cluster with RDS Proxy
+- Optional: RDS PostgreSQL Multi-AZ deployment with RDS Proxy — a 3-AZ Multi-AZ DB cluster (writer + 2 readers) by default, or a 2-AZ Multi-AZ DB instance (primary + standby) when `minimal_cluster = true`
 
 ## Prerequisites
 
@@ -162,10 +162,11 @@ Once both files are in place, run `make create-cluster` and it will proceed dire
 | `eks_workers_desired_instance_count` | `3` | Desired worker nodes |
 | `enable_spot_instances` | `true` | Use spot instances for cost savings |
 | `public_api_server` | `true` | Make the EKS API server publicly accessible |
-| `minimal_cluster` | `false` | Deploy with 4 subnets across 2 AZs and 1 node for dev/test cost savings. Requires at least `m6a.4xlarge` — all AtScale components must fit on a single node. |
+| `minimal_cluster` | `false` | Deploy with 4 subnets across 2 AZs and 1 node for dev/test cost savings. Requires at least `m6a.4xlarge` — all AtScale components must fit on a single node. If `enable_rds = true`, RDS deploys as a 2-AZ Multi-AZ DB instance (primary + standby) instead of a 3-AZ Multi-AZ DB cluster. |
 | `enable_rds` | `false` | Create RDS PostgreSQL instance |
 | `rds_engine_version` | `"16.11"` | PostgreSQL version |
-| `rds_instance_class` | `"db.r6gd.xlarge"` | RDS instance class |
+| `rds_instance_class` | `"db.r6gd.xlarge"` | RDS instance class (3-AZ Multi-AZ DB cluster mode, i.e. `minimal_cluster = false`) |
+| `rds_instance_class_instance_mode` | `"db.r6g.xlarge"` | RDS instance class used instead when `minimal_cluster = true` (2-AZ Multi-AZ DB instance) |
 | `rds_db_name` | `"postgres"` | Database name |
 | `rds_username` | `"postgres"` | Database username |
 
@@ -261,3 +262,7 @@ Terraform will reject invalid values at plan time with a descriptive error messa
 ### Minimal cluster instance type
 
 When `minimal_cluster = true`, all AtScale components are scheduled on a single node. An `m6a.4xlarge` (16 vCPU / 64 GB RAM) is the recommended minimum. Smaller instance types will likely result in pods stuck in `Pending` due to insufficient resources.
+
+### RDS with minimal_cluster
+
+`minimal_cluster = true` only creates 2 private subnets (2 AZs), which is below AWS's 3-AZ minimum for a Multi-AZ DB *cluster* (writer + 2 readers). When `enable_rds = true` is combined with `minimal_cluster = true`, RDS instead deploys as a classic Multi-AZ DB *instance* (primary + 1 non-readable standby, `rds_instance_class_instance_mode`) — there is no read replica and no RDS Proxy read-only endpoint in this mode. With `minimal_cluster = false` (3+ AZs), RDS deploys as the Multi-AZ DB cluster as before.

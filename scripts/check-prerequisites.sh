@@ -3,6 +3,7 @@
 set -euo pipefail
 
 PROVIDER="${1:-}"
+AWS_PROFILE="${2:-${AWS_PROFILE:-}}"
 ERRORS=0
 
 echo "============================================"
@@ -58,11 +59,17 @@ case "$PROVIDER" in
     echo "AWS-specific checks:"
     check_command "aws" "AWS CLI" "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
     if command -v aws >/dev/null 2>&1; then
-      if aws sts get-caller-identity >/dev/null 2>&1; then
-        ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
-        echo "  [OK] AWS credentials configured (account: $ACCOUNT)"
+      AWS_PROFILE_OPTS=()
+      PROFILE_LABEL="default"
+      if [ -n "$AWS_PROFILE" ]; then
+        AWS_PROFILE_OPTS=(--profile "$AWS_PROFILE")
+        PROFILE_LABEL="$AWS_PROFILE"
+      fi
+      if aws sts get-caller-identity "${AWS_PROFILE_OPTS[@]+"${AWS_PROFILE_OPTS[@]}"}" >/dev/null 2>&1; then
+        ACCOUNT=$(aws sts get-caller-identity "${AWS_PROFILE_OPTS[@]+"${AWS_PROFILE_OPTS[@]}"}" --query Account --output text 2>/dev/null)
+        echo "  [OK] AWS credentials configured (profile: $PROFILE_LABEL, account: $ACCOUNT)"
       else
-        echo "  [MISSING] AWS credentials not configured - run: aws configure"
+        echo "  [MISSING] AWS credentials not configured for profile '$PROFILE_LABEL' - run: aws configure --profile $PROFILE_LABEL"
         ERRORS=$((ERRORS + 1))
       fi
     fi
@@ -130,9 +137,10 @@ case "$PROVIDER" in
     fi
     ;;
   *)
-    echo "Usage: $0 <aws|google|azure>"
+    echo "Usage: $0 <aws|google|azure> [aws-profile]"
     echo ""
     echo "Specify a cloud provider to check provider-specific tools."
+    echo "For aws, optionally pass an AWS CLI profile name (or set AWS_PROFILE)."
     ;;
 esac
 
