@@ -99,11 +99,7 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
 resource "random_password" "rds_password" {
   count            = var.enable_rds ? 1 : 0
   length           = 16
-  special          = true
-  override_special = "!#$%&*"
-  lifecycle {
-    ignore_changes = all
-  }
+  special          = false
 }
 
 resource "aws_secretsmanager_secret" "rds_credentials" {
