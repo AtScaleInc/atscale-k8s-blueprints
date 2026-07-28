@@ -169,5 +169,32 @@ resource "azapi_update_resource" "ingress_profile" {
       condition     = !var.enable_application_load_balancer || var.enable_gateway_api
       error_message = "enable_application_load_balancer requires enable_gateway_api: the ALB controller add-on only works with the AKS-managed Gateway API installation."
     }
+    precondition {
+      condition     = !var.enable_application_load_balancer || var.alb_subnet_id != null
+      error_message = "enable_application_load_balancer requires alb_subnet_id: the ALB controller needs a delegated association subnet to grant its identity access to."
+    }
   }
+}
+
+# The ALB controller add-on creates a user-assigned identity named
+# applicationloadbalancer-<cluster> in the node resource group. Read it back so
+# its principal can be granted access to the association subnet. depends_on the
+# patch because the identity does not exist until the add-on is enabled.
+data "azurerm_user_assigned_identity" "alb" {
+  count               = var.enable_application_load_balancer ? 1 : 0
+  name                = "applicationloadbalancer-${local.cluster_name}"
+  resource_group_name = var.node_resource_group_name
+
+  depends_on = [azapi_update_resource.ingress_profile]
+}
+
+# The ALB controller must be able to join the association subnet
+# (Microsoft.Network/virtualNetworks/subnets/join/action). The add-on grants its
+# identity access only within the node resource group, not the bring-your-own
+# VNet, so the join permission on the association subnet is granted here.
+resource "azurerm_role_assignment" "alb_network_contributor_on_alb_subnet" {
+  count                = var.enable_application_load_balancer ? 1 : 0
+  scope                = var.alb_subnet_id
+  role_definition_name = "Network Contributor"
+  principal_id         = data.azurerm_user_assigned_identity.alb[0].principal_id
 }

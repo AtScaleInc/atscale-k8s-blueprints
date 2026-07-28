@@ -16,6 +16,32 @@ resource "azurerm_subnet" "aks-subnet" {
 }
 
 
+# Dedicated subnet for the Application Gateway for Containers association.
+# Required by the ALB controller add-on: it must be delegated to
+# Microsoft.ServiceNetworking/trafficControllers and be at least a /24
+# (>= 250 usable addresses). The add-on does not create this for a
+# bring-your-own VNet, so the blueprint provisions it here.
+resource "azurerm_subnet" "alb-subnet" {
+  count                = var.enable_ingress_gateway ? 1 : 0
+  name                 = "${var.environment}-alb-subnet"
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.this.name
+  address_prefixes     = [var.alb_subnet_cidr]
+
+  delegation {
+    name = "alb-delegation"
+
+    service_delegation {
+      name = "Microsoft.ServiceNetworking/trafficControllers"
+
+      actions = [
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+      ]
+    }
+  }
+}
+
+
 resource "azurerm_subnet" "postgresql-subnet" {
   count                = var.enable_postgresql ? 1 : 0
   name                 = "${var.environment}-postgresql-subnet"
