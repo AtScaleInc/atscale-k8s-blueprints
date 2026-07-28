@@ -10,21 +10,28 @@ locals {
     cidrsubnet(var.vpc_cidr, 2, 0),
     cidrsubnet(var.vpc_cidr, 2, 1)
   ]
+
+  # Third /24 of the /22, used for the Application Gateway for Containers
+  # association subnet when the ingress gateway is enabled. A /24 gives the
+  # >= 250 addresses the association requires.
+  alb_subnet_cidr = cidrsubnet(var.vpc_cidr, 2, 2)
 }
 
 # VPC
 ################################################################################
 
 module "networking" {
-  source              = "../../modules/azure/networking"
-  vnet_name           = "${var.environment}-aks-vnet"
-  address_space       = [var.vpc_cidr]
-  location            = var.region
-  resource_group_name = var.resource_group_name
-  environment         = var.environment
-  nodes_subnet_cidr   = local.nodes_subnet_cidr[0]
-  aks_subnet_cidr     = local.nodes_subnet_cidr[1]
-  enable_postgresql   = var.enable_postgresql
+  source                 = "../../modules/azure/networking"
+  vnet_name              = "${var.environment}-aks-vnet"
+  address_space          = [var.vpc_cidr]
+  location               = var.region
+  resource_group_name    = var.resource_group_name
+  environment            = var.environment
+  nodes_subnet_cidr      = local.nodes_subnet_cidr[0]
+  aks_subnet_cidr        = local.nodes_subnet_cidr[1]
+  enable_postgresql      = var.enable_postgresql
+  enable_ingress_gateway = var.enable_ingress_gateway
+  alb_subnet_cidr        = local.alb_subnet_cidr
 }
 
 
@@ -45,6 +52,7 @@ module "aks" {
   default_node_pool_node_count         = var.aks_node_count
   default_node_pool_vm_size            = var.aks_node_size
   aks_subnet_id                        = module.networking.aks_subnet_id
+  alb_subnet_id                        = module.networking.alb_subnet_id
   enable_private_cluster               = !var.public_api_server
   enable_gateway_api                   = var.enable_ingress_gateway
   enable_application_load_balancer     = var.enable_ingress_gateway

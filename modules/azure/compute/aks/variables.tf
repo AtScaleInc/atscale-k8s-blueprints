@@ -82,6 +82,12 @@ variable "dns_service_ip" {
   default     = "10.0.0.10"
 }
 
+variable "alb_subnet_id" {
+  description = "ID of the delegated subnet for the Application Gateway for Containers association. When set together with enable_application_load_balancer, the ALB controller identity is granted Network Contributor on it. Null when the ingress gateway is disabled."
+  type        = string
+  default     = null
+}
+
 variable "enable_gateway_api" {
   description = "Enable the AKS-managed Gateway API installation. Required by the Application Gateway for Containers ALB controller add-on. PREVIEW: requires the ManagedGatewayAPIPreview feature to be registered on the subscription."
   type        = bool

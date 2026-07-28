@@ -120,12 +120,37 @@ two add-ons so it can serve ingress without any further installation:
 Enabling the ALB controller also turns on **workload identity**, which the
 add-on requires to authenticate its controller.
 
+The blueprint also provisions the infrastructure the association needs: a
+dedicated subnet delegated to `Microsoft.ServiceNetworking/trafficControllers`
+(a `/24` inside your VNet), and a `Network Contributor` role assignment giving
+the ALB controller identity the `join` permission on it. The add-on does not
+create these for a bring-your-own VNet, so they are part of the blueprint.
+
 After the cluster is up, confirm the add-ons are running:
 
 ```sh
 kubectl get pods -n kube-system | grep alb-controller
 kubectl get gatewayclass azure-alb-external
 ```
+
+### Wiring up traffic (day-2)
+
+The blueprint makes the cluster ingress-*ready* but does not define your
+routing. To serve traffic you still create, in the cluster:
+
+1. An `ApplicationLoadBalancer` resource whose `associations` reference the
+   delegated subnet - this provisions the Application Gateway for Containers in
+   Azure. Find the subnet ID with:
+   ```sh
+   az network vnet subnet show -g <resource_group> \
+     --vnet-name <environment>-aks-vnet --name <environment>-alb-subnet \
+     --query id -o tsv
+   ```
+2. A `Gateway` (or `Ingress`) that references the provisioned resource by its
+   `alb-id`. For an `Ingress`, the association annotation is
+   `alb.networking.azure.io/alb-id`, not `alb.networking.azure.io/alb-controller`.
+
+See the [Application Gateway for Containers quickstart](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-create-application-gateway-for-containers-managed-by-alb-controller).
 
 Both add-ons are currently **in preview**:
 

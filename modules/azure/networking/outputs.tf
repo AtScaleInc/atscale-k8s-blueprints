@@ -27,6 +27,11 @@ output "aks_subnet_id" {
   value       = azurerm_subnet.aks-subnet.id
 }
 
+output "alb_subnet_id" {
+  description = "The ID of the Application Gateway for Containers association subnet, or null when the ingress gateway is disabled."
+  value       = var.enable_ingress_gateway ? azurerm_subnet.alb-subnet[0].id : null
+}
+
 
 output "postgresql_private_dns_zone_id" {
 
