@@ -133,12 +133,30 @@ kubectl get pods -n kube-system | grep alb-controller
 kubectl get gatewayclass azure-alb-external
 ```
 
+### Default Application Gateway for Containers (optional)
+
+By default the blueprint makes the cluster ingress-*ready* (subnet, role, and
+the ALB controller) but does not provision an Application Gateway for Containers
+- that is a billable Azure resource, so it is opt-in.
+
+Set `create_default_alb = true` (or answer the matching prompt) and
+`make create-cluster-azure` will, after the cluster is up, apply a default
+`ApplicationLoadBalancer` for you and wait for the gateway to provision. It
+prints the resulting `alb-id` to reference from your routes.
+
+This step runs only through `make` - a bare `terraform apply` does not create
+it, because the `ApplicationLoadBalancer` is a Kubernetes resource whose CRD is
+installed by the add-on only after the cluster exists. The manifest is applied
+by `scripts/apply-alb-manifest.sh` (namespace `alb-infra`, resource
+`default-alb`).
+
 ### Wiring up traffic (day-2)
 
-The blueprint makes the cluster ingress-*ready* but does not define your
-routing. To serve traffic you still create, in the cluster:
+Whether the default ALB was created for you or you create your own, you still
+define the routing:
 
-1. An `ApplicationLoadBalancer` resource whose `associations` reference the
+1. If you did **not** set `create_default_alb`, create an
+   `ApplicationLoadBalancer` resource whose `associations` reference the
    delegated subnet - this provisions the Application Gateway for Containers in
    Azure. Find the subnet ID with:
    ```sh

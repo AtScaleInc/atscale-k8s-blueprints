@@ -14,6 +14,15 @@ output "aks_name" {
   value = module.aks.aks_name
 }
 
+# Consumed by the make target to bootstrap the default ApplicationLoadBalancer.
+output "alb_subnet_id" {
+  value = module.networking.alb_subnet_id
+}
+
+output "create_default_alb" {
+  value = var.create_default_alb
+}
+
 ################################################################################
 # Database
 ################################################################################

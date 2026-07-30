@@ -83,6 +83,17 @@ variable "enable_ingress_gateway" {
   default     = true
 }
 
+variable "create_default_alb" {
+  description = "After the cluster is created, apply a default ApplicationLoadBalancer resource so an Application Gateway for Containers is provisioned out of the box. Only takes effect via 'make create-cluster-azure' and when enable_ingress_gateway is true. Off by default because it provisions a billable Azure resource on every cluster; leave false and create the resource yourself if you prefer to control its name/namespace."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.create_default_alb || var.enable_ingress_gateway
+    error_message = "create_default_alb requires enable_ingress_gateway = true: the default ALB needs the ingress gateway add-ons and the association subnet they create."
+  }
+}
+
 ############################################################################
 # Database Variables
 ############################################################################

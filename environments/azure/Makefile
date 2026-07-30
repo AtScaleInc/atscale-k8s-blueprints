@@ -49,6 +49,16 @@ create-cluster:
 		echo ""; \
 		read -p "Enable ingress gateway add-ons? (true/false) [true]: " ENABLE_INGRESS; \
 		ENABLE_INGRESS=$${ENABLE_INGRESS:-true}; \
+		CREATE_ALB=false; \
+		if [ "$$ENABLE_INGRESS" = "true" ]; then \
+			echo ""; \
+			echo "  Optional: also create a default Application Gateway for Containers"; \
+			echo "            after the cluster is up, so ingress works with no further"; \
+			echo "            steps. This provisions a BILLABLE Azure resource."; \
+			echo ""; \
+			read -p "Create a default Application Gateway for Containers? (true/false) [false]: " CREATE_ALB; \
+			CREATE_ALB=$${CREATE_ALB:-false}; \
+		fi; \
 		read -p "Enable PostgreSQL? (true/false) [false]: " ENABLE_PG; \
 		ENABLE_PG=$${ENABLE_PG:-false}; \
 	fi; \
@@ -86,6 +96,7 @@ create-cluster:
 			echo "    Nodes:           always private (private subnets)"; \
 			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private (CIDR: $$AUTHORIZED_CIDR)" || echo "public")"; \
 			echo "    Ingress gateway: $$([ "$$ENABLE_INGRESS" = "false" ] && echo "no" || echo "yes (Gateway API + ALB controller, preview)")"; \
+			echo "    Default AGC:     $$([ "$$CREATE_ALB" = "true" ] && echo "yes (billable Application Gateway for Containers)" || echo "no")"; \
 			echo ""; \
 			echo "  Database (PostgreSQL Flexible Server):"; \
 			if [ "$$ENABLE_PG" = "true" ]; then \
@@ -128,6 +139,7 @@ create-cluster:
 			echo 'public_api_server          = '$$PUBLIC_API >> terraform.tfvars; \
 			echo 'authorized_network_cidr    = "'$$AUTHORIZED_CIDR'"' >> terraform.tfvars; \
 			echo 'enable_ingress_gateway     = '$$ENABLE_INGRESS >> terraform.tfvars; \
+			echo 'create_default_alb         = '$$CREATE_ALB >> terraform.tfvars; \
 			echo 'enable_postgresql          = '$$ENABLE_PG >> terraform.tfvars; \
 			echo "terraform.tfvars generated."; \
 		fi; \
@@ -163,6 +175,27 @@ create-cluster:
 	fi; \
 	terraform apply tfplan && \
 	rm -f tfplan && \
+	if [ "$$(terraform output -raw create_default_alb 2>/dev/null)" = "true" ]; then \
+		echo ""; \
+		echo "============================================"; \
+		echo "  Provisioning default Application Gateway for Containers..."; \
+		echo "============================================"; \
+		echo ""; \
+		if az aks get-credentials \
+				--resource-group "$$(terraform output -raw resource_group_name)" \
+				--name "$$(terraform output -raw aks_name)" --overwrite-existing \
+			&& kubelogin convert-kubeconfig -l azurecli \
+			&& bash ./scripts/apply-alb-manifest.sh "$$(terraform output -raw alb_subnet_id)"; then \
+			true; \
+		else \
+			echo ""; \
+			echo "WARNING: the default Application Gateway for Containers bootstrap did not complete."; \
+			echo "         The cluster itself was created successfully. Retry the ALB step with:"; \
+			echo "           make create-cluster   (re-runs the ALB step; it is idempotent)"; \
+			echo "         or apply it manually:"; \
+			echo "           bash ./scripts/apply-alb-manifest.sh $$(terraform output -raw alb_subnet_id 2>/dev/null)"; \
+		fi; \
+	fi && \
 	echo "" && \
 	echo "============================================" && \
 	echo "  AKS Cluster Created Successfully!" && \
@@ -185,13 +218,30 @@ create-cluster:
 delete-cluster:
 	@echo "WARNING: This will destroy ALL resources including any databases and data."
 	@read -p "Are you sure? (yes/no): " CONFIRM; \
-	if [ "$$CONFIRM" = "yes" ]; then \
-		terraform destroy; \
-		echo ""; \
-		echo "Cluster deleted successfully."; \
-	else \
+	if [ "$$CONFIRM" != "yes" ]; then \
 		echo "Cancelled."; \
-	fi
+		exit 0; \
+	fi; \
+	if [ "$$(terraform output -raw create_default_alb 2>/dev/null)" = "true" ]; then \
+		echo "Removing the default Application Gateway for Containers before destroy..."; \
+		echo "(the ApplicationLoadBalancer is not in Terraform state; deleting it first releases"; \
+		echo " its association on the delegated subnet so 'terraform destroy' does not fail)"; \
+		if az aks get-credentials \
+				--resource-group "$$(terraform output -raw resource_group_name)" \
+				--name "$$(terraform output -raw aks_name)" --overwrite-existing 2>/dev/null \
+			&& kubelogin convert-kubeconfig -l azurecli 2>/dev/null; then \
+			kubectl delete applicationloadbalancer default-alb -n alb-infra \
+				--ignore-not-found --timeout=300s \
+				|| echo "WARNING: ALB cleanup did not finish; 'terraform destroy' may fail on the subnet - if so, remove the resource group with: az group delete -n $$(terraform output -raw resource_group_name)"; \
+		else \
+			echo "WARNING: could not reach the cluster to remove the ALB resource first."; \
+			echo "         'terraform destroy' may fail on the association subnet; if so, use:"; \
+			echo "           az group delete -n $$(terraform output -raw resource_group_name)"; \
+		fi; \
+	fi; \
+	terraform destroy && \
+	echo "" && \
+	echo "Cluster deleted successfully."
 
 plan:
 	terraform init
