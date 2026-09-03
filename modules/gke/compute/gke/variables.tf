@@ -92,6 +92,12 @@ variable "preemptible" {
   default     = false
 }
 
+variable "enable_gateway_api" {
+  description = "Whether to enable GKE's native Gateway API support (gateway_api_config channel)."
+  type        = bool
+  default     = false
+}
+
 variable "public_api_server" {
   description = "Whether the cluster API server is publicly accessible. Set to false for a fully private cluster (requires VPN or bastion to run kubectl)."
   type        = bool

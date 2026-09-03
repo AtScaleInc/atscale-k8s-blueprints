@@ -149,6 +149,12 @@ variable "authorized_network_cidr" {
   default     = ""
 }
 
+variable "enable_gateway_api" {
+  description = "Whether to enable GKE's native Gateway API support on the cluster."
+  type        = bool
+  default     = false
+}
+
 ############################################################################
 # Database Variables
 ############################################################################

@@ -43,6 +43,7 @@ module "gke" {
   master_ipv4_cidr_block  = "172.16.0.0/28"
   public_api_server       = var.public_api_server
   authorized_network_cidr = var.authorized_network_cidr
+  enable_gateway_api      = var.enable_gateway_api
 
   # Filestore Parameters
   tier = var.filestore_tier

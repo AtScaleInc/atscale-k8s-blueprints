@@ -59,6 +59,13 @@ resource "google_container_cluster" "primary" {
     }
   }
 
+  # GKE's built-in Gateway API controller — no separate infra install needed
+  # (unlike AWS/Azure), just this toggle. CHANNEL_DISABLED is GKE's own
+  # default, so leaving this off is a no-op for every other GCP task.
+  gateway_api_config {
+    channel = var.enable_gateway_api ? "CHANNEL_STANDARD" : "CHANNEL_DISABLED"
+  }
+
   # Resource labels (GCP requires lowercase keys and values)
   resource_labels = {
     environment = lower(var.environment)
