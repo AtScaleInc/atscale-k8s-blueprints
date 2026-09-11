@@ -61,6 +61,10 @@ create-cluster:
 		fi; \
 		read -p "Enable RDS PostgreSQL? (true/false) [false]: " ENABLE_RDS; \
 		ENABLE_RDS=$${ENABLE_RDS:-false}; \
+		read -p "Enable ingress gateway add-ons? (true/false) [false]: " ENABLE_GATEWAY_API; \
+		ENABLE_GATEWAY_API=$${ENABLE_GATEWAY_API:-false}; \
+		read -p "Gateway load balancer scheme (internet-facing/internal) [internet-facing]: " GATEWAY_SCHEME; \
+		GATEWAY_SCHEME=$${GATEWAY_SCHEME:-internet-facing}; \
 	fi; \
 	if [ "$$NEED_BACKEND" = "false" ] && [ "$$NEED_TFVARS" = "false" ]; then \
 		echo "Backend and configuration already exist, proceeding with deployment..."; \
@@ -94,6 +98,7 @@ create-cluster:
 			echo "    Spot instances:  enabled (default)"; \
 			echo "    Nodes:           always private (private subnets)"; \
 			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private" || echo "public")"; \
+			echo "    Gateway API:     $$([ "$$ENABLE_GATEWAY_API" = "true" ] && echo "enabled ($$GATEWAY_SCHEME)" || echo "disabled (default)")"; \
 			echo ""; \
 			echo "  Database (RDS):"; \
 			if [ "$$ENABLE_RDS" = "true" ]; then \
@@ -132,6 +137,8 @@ create-cluster:
 			echo 'eks_instance_types     = ["'$$INSTANCE_TYPE'"]' >> terraform.tfvars; \
 			echo 'public_api_server      = '$$PUBLIC_API >> terraform.tfvars; \
 			echo 'enable_rds             = '$$ENABLE_RDS >> terraform.tfvars; \
+			echo 'enable_gateway_api     = '$$ENABLE_GATEWAY_API >> terraform.tfvars; \
+			echo 'gateway_scheme         = "'$$GATEWAY_SCHEME'"' >> terraform.tfvars; \
 			echo 'minimal_cluster        = '$$MINIMAL_CLUSTER >> terraform.tfvars; \
 			echo "terraform.tfvars generated."; \
 		fi; \
