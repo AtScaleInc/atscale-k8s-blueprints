@@ -175,6 +175,25 @@ create-cluster:
 	fi; \
 	terraform apply tfplan && \
 	rm -f tfplan && \
+	echo "" && \
+	echo "============================================" && \
+	echo "  Configuring Azure Files StorageClass for RWX volumes..." && \
+	echo "============================================" && \
+	echo "" && \
+	if az aks get-credentials \
+			--resource-group "$$(terraform output -raw resource_group_name)" \
+			--name "$$(terraform output -raw aks_name)" --overwrite-existing \
+		&& kubelogin convert-kubeconfig -l azurecli \
+		&& bash ./scripts/apply-storageclass-manifest.sh; then \
+		true; \
+	else \
+		echo ""; \
+		echo "WARNING: applying the azurefile-csi-nfs StorageClass did not complete."; \
+		echo "         The cluster itself was created successfully. Retry with:"; \
+		echo "           az aks get-credentials --resource-group $$(terraform output -raw resource_group_name) --name $$(terraform output -raw aks_name)"; \
+		echo "           kubelogin convert-kubeconfig -l azurecli"; \
+		echo "           bash ./scripts/apply-storageclass-manifest.sh"; \
+	fi && \
 	if [ "$$(terraform output -raw create_default_alb 2>/dev/null)" = "true" ]; then \
 		echo ""; \
 		echo "============================================"; \

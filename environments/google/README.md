@@ -121,6 +121,30 @@ When `public_api_server = false`, the Makefile automatically performs a **two-ph
 
 No manual intervention is needed — the Makefile handles both phases transparently.
 
+## Storage
+
+Terraform creates a `filestore` StorageClass, backed by Filestore via the `filestore.csi.storage.gke.io` driver, and sets it as the cluster's default class. It provides **ReadWriteMany (RWX)** volumes, with the tier controlled by `filestore_tier`.
+
+This is a **PROD requirement**: AtScale's shared logs volume needs RWX access from multiple pods. A dev/test install can run fine on a normal RWO storage class, since only a single pod mounts the volume — but note `filestore` is the cluster *default*, so PVCs without an explicit `storageClassName` already get RWX here.
+
+Example PVC using the RWX class:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atscale-logs
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: filestore
+  resources:
+    requests:
+      storage: 1Ti
+```
+
+> **Note:** Filestore enforces a minimum share size that depends on `filestore_tier` (e.g. `BASIC_SSD`/`PREMIUM` requires multiple TiB) — see the [Filestore capacity docs](https://cloud.google.com/filestore/docs/service-tiers) for the exact minimum of your configured tier. Smaller PVC requests are rounded up by the driver.
+
 ## Accessing the Cluster
 
 After creation, connect to the cluster:
