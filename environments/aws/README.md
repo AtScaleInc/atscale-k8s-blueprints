@@ -190,6 +190,31 @@ When `public_api_server = false`, the Makefile automatically performs a **two-ph
 
 No manual intervention is needed — the Makefile handles both phases transparently.
 
+## Storage
+
+Terraform creates two StorageClasses on every cluster:
+
+- **`efs-sc`** — ReadWriteMany (RWX), backed by the EFS file system created above, via the `efs.csi.aws.com` driver.
+- **`default`** — ReadWriteOnce (RWO), backed by EBS (`gp2`), marked as the cluster's default class.
+
+This is a **PROD requirement**: AtScale's shared logs volume needs RWX access from multiple pods. A dev/test install can run fine on the default RWO class, since only a single pod mounts the volume.
+
+Example PVC using the RWX class:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atscale-logs
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: efs-sc
+  resources:
+    requests:
+      storage: 100Gi
+```
+
 ## Accessing the Cluster
 
 After creation, connect to the cluster:

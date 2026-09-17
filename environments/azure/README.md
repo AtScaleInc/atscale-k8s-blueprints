@@ -9,6 +9,7 @@ This blueprint creates an AKS (Azure Kubernetes Service) cluster on Azure with n
 - Log Analytics workspace
 - Network Security Groups
 - Gateway API and Application Gateway for Containers add-ons, so the cluster can serve ingress out of the box (see [Ingress gateway](#ingress-gateway))
+- `azurefile-csi-nfs` StorageClass for ReadWriteMany (RWX) volumes (see [Storage](#storage))
 - Optional: Azure PostgreSQL Flexible Server with private networking
 
 ## Prerequisites
@@ -184,6 +185,40 @@ Both add-ons are currently **in preview**:
 
 To deploy without them, set `enable_ingress_gateway = false`. The cluster is
 then created exactly as before and you can install your own ingress controller.
+
+## Storage
+
+After the cluster is up, the Makefile applies an `azurefile-csi-nfs` StorageClass — Azure Files over the **NFS** protocol, backed by `file.csi.azure.com`, the CSI driver AKS ships by default. It provides **ReadWriteMany (RWX)** volumes.
+
+> **Why NFS, not SMB:** AKS also ships a built-in `azurefile-csi` class that is RWX-capable, but it mounts shares over **SMB**. AtScale performs POSIX file operations (e.g. file locking, permission bits) against its shared logs volume that SMB does not support, so the RWX class **must** use the NFS protocol.
+
+This is a **PROD requirement**: AtScale's shared logs volume needs RWX access from multiple pods. A dev/test install can run fine on a normal RWO class (the AKS-managed default Azure Disk class), since only a single pod mounts the volume.
+
+Example PVC using the RWX class:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: atscale-logs
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: azurefile-csi-nfs
+  resources:
+    requests:
+      storage: 100Gi
+```
+
+> **Note:** Premium Azure Files (required for NFS) has a 100Gi minimum share size — smaller PVC requests are rounded up by the driver.
+
+If the StorageClass step didn't complete during `make create-cluster` (see the warning it prints), apply it manually:
+
+```sh
+az aks get-credentials --resource-group <resource_group> --name <cluster_name>
+kubelogin convert-kubeconfig -l azurecli
+bash ./scripts/apply-storageclass-manifest.sh
+```
 
 ## Accessing the Cluster
 

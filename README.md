@@ -75,7 +75,7 @@ Each blueprint provisions:
 
 - A cloud-native VPC/VNet with properly configured subnets
 - A managed Kubernetes cluster with autoscaling node pools
-- Storage classes for persistent storage (EFS, Filestore, etc.)
+- Storage classes for persistent storage (AWS: EFS, Google Cloud: Filestore, Azure: Azure Files over NFS)
 - IAM roles and security groups with least-privilege access
 - Optional: Managed PostgreSQL database (RDS, Cloud SQL, Azure PostgreSQL)
 
