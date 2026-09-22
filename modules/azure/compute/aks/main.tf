@@ -32,7 +32,16 @@ resource "azurerm_log_analytics_workspace" "this" {
 
 module "aks" {
   source  = "Azure/avm-res-containerservice-managedcluster/azurerm"
-  version = "0.6.7"
+  # Pinned below 0.6.7 on purpose: that release added ingress_profile's
+  # validation blocks with a coalesce(try(...)) bug that errors unconditionally
+  # even when ingress_profile is left null (which we always do — see the
+  # comment below on why ingress_profile is never set). Terraform doesn't
+  # guarantee short-circuit evaluation of the `||` operands in validation
+  # conditions, so `var.ingress_profile == null` being true doesn't prevent
+  # the second operand from being evaluated and erroring. Fixed upstream only
+  # in 0.8.2+, which requires passing through the 0.8.1 breaking AzAPI
+  # backend migration. Bump past 0.6.7 only alongside that migration.
+  version = "0.6.6"
 
   name       = local.cluster_name
   location   = var.location

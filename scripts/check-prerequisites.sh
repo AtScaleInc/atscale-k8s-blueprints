@@ -34,7 +34,7 @@ check_command() {
 }
 
 # Common tools
-check_command "terraform" "Terraform (>= 1.11.0)" "https://www.terraform.io/downloads"
+check_command "terraform" "Terraform (>= 1.14.0)" "https://www.terraform.io/downloads"
 check_command "make" "Make" "Install via your package manager"
 check_command "kubectl" "kubectl" "https://kubernetes.io/docs/tasks/tools/"
 check_command "jq" "jq" "https://jqlang.github.io/jq/download/"
@@ -45,8 +45,8 @@ if command -v terraform >/dev/null 2>&1; then
   TF_VERSION=$(terraform version -json 2>/dev/null | jq -r '.terraform_version' 2>/dev/null || { terraform version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true; })
   TF_MAJOR=$(echo "$TF_VERSION" | cut -d. -f1)
   TF_MINOR=$(echo "$TF_VERSION" | cut -d. -f2)
-  if [ "$TF_MAJOR" -lt 1 ] || ([ "$TF_MAJOR" -eq 1 ] && [ "$TF_MINOR" -lt 11 ]); then
-    echo "  [WARNING] Terraform version $TF_VERSION is below 1.11.0"
+  if [ "$TF_MAJOR" -lt 1 ] || ([ "$TF_MAJOR" -eq 1 ] && [ "$TF_MINOR" -lt 14 ]); then
+    echo "  [WARNING] Terraform version $TF_VERSION is below 1.14.0"
     ERRORS=$((ERRORS + 1))
   fi
 fi

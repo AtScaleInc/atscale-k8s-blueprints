@@ -25,7 +25,8 @@ resource "google_sql_database_instance" "postgres" {
   depends_on = [google_service_networking_connection.private_vpc_connection]
 
   settings {
-    tier = var.database_tier
+    tier    = var.database_tier
+    edition = "ENTERPRISE"
 
     backup_configuration {
       enabled                        = true

@@ -78,7 +78,7 @@ cat <<EOF > "$BACKEND_FILE"
 ################################################################################
 
 terraform {
-  required_version = ">= 1.11.0"
+  required_version = ">= 1.14.0"
 
   backend "azurerm" {
     resource_group_name  = "$RESOURCE_GROUP_NAME"

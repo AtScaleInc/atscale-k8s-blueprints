@@ -25,9 +25,9 @@ variable "database_tier" {
 }
 
 variable "database_name" {
-  description = "The name of the database to create"
+  description = "The name of the database to create (must not be \"postgres\" — Cloud SQL always creates that database by default, and Terraform cannot create a duplicate)"
   type        = string
-  default     = "postgres"
+  default     = "atscale"
 }
 
 variable "database_user" {

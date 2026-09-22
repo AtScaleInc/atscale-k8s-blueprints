@@ -98,7 +98,7 @@ cat <<EOF > "$BACKEND_FILE"
 ################################################################################
 
 terraform {
-  required_version = ">= 1.11.0"
+  required_version = ">= 1.14.0"
 
   backend "s3" {
     bucket       = "$BUCKET_NAME"
