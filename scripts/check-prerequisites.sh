@@ -102,34 +102,64 @@ case "$PROVIDER" in
         SUBSCRIPTION=$(az account show --query name -o tsv 2>/dev/null)
         echo "  [OK] Azure authenticated (subscription: $SUBSCRIPTION)"
 
-        # The ingress gateway add-ons (Gateway API + Application Gateway for
-        # Containers) are in preview. Without these registrations the cluster
-        # create fails part-way through with an opaque ARM error, so check up
-        # front and tell the user exactly what to run.
-        for FEATURE in ManagedGatewayAPIPreview ApplicationLoadBalancerPreview; do
-          STATE=$(az feature show --namespace Microsoft.ContainerService --name "$FEATURE" --query properties.state -o tsv 2>/dev/null)
-          if [ "$STATE" = "Registered" ]; then
-            echo "  [OK] Preview feature $FEATURE registered"
-          else
-            echo "  [MISSING] Preview feature $FEATURE is '${STATE:-NotRegistered}' - required for the ingress gateway add-ons."
-            echo "            Run: az feature register --namespace Microsoft.ContainerService --name $FEATURE"
-            echo "            Then wait for it to report Registered and run: az provider register --namespace Microsoft.ContainerService"
-            echo "            Or set enable_ingress_gateway = false to deploy without them."
-            ERRORS=$((ERRORS + 1))
-          fi
-        done
+        # The deployer needs Contributor (to create the resources) plus the
+        # right to create role assignments (Network Contributor for the cluster
+        # identity, AKS RBAC Cluster Admin for the deployer). Only warn: the
+        # roles may come from a custom role or PIM, which this cannot see.
+        if [ "$(az account show --query user.type -o tsv 2>/dev/null)" = "user" ]; then
+          ASSIGNEE=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
+        else
+          ASSIGNEE=$(az account show --query user.name -o tsv 2>/dev/null || true)
+        fi
+        ROLES=$(az role assignment list --assignee "$ASSIGNEE" --all --include-inherited --include-groups \
+          --query "[].roleDefinitionName" -o tsv 2>/dev/null || true)
+        if echo "$ROLES" | grep -qx "Owner" \
+          || { echo "$ROLES" | grep -qx "Contributor" \
+            && echo "$ROLES" | grep -Eqx "User Access Administrator|Role Based Access Control Administrator"; }; then
+          echo "  [OK] Azure permissions (can create resources and role assignments)"
+        else
+          echo "  [WARN] Could not confirm Azure permissions. The deployer needs Contributor plus"
+          echo "         Role Based Access Control Administrator (or Owner) on the subscription or"
+          echo "         target resource groups - see 'Required permissions' in environments/azure/README.md."
+        fi
 
-        for RP in Microsoft.NetworkFunction Microsoft.ServiceNetworking; do
-          STATE=$(az provider show --namespace "$RP" --query registrationState -o tsv 2>/dev/null)
-          if [ "$STATE" = "Registered" ]; then
-            echo "  [OK] Resource provider $RP registered"
-          else
-            echo "  [MISSING] Resource provider $RP is '${STATE:-NotRegistered}' - required for the ingress gateway add-ons."
-            echo "            Run: az provider register --namespace $RP"
-            echo "            Or set enable_ingress_gateway = false to deploy without them."
-            ERRORS=$((ERRORS + 1))
-          fi
-        done
+        # A minimal cluster (the default), or one with enable_ingress_gateway =
+        # false, never enables the preview add-ons, so their registrations are
+        # only needed when terraform.tfvars sets minimal_cluster = false.
+        TFVARS="$(dirname "$0")/../environments/azure/terraform.tfvars"
+        if ! grep -Eq '^[[:space:]]*minimal_cluster[[:space:]]*=[[:space:]]*false' "$TFVARS" 2>/dev/null \
+          || grep -Eq '^[[:space:]]*enable_ingress_gateway[[:space:]]*=[[:space:]]*false' "$TFVARS" 2>/dev/null; then
+          echo "  [SKIP] Ingress gateway preview features (not needed for a minimal cluster)"
+        else
+          # The ingress gateway add-ons (Gateway API + Application Gateway for
+          # Containers) are in preview. Without these registrations the cluster
+          # create fails part-way through with an opaque ARM error, so check up
+          # front and tell the user exactly what to run.
+          for FEATURE in ManagedGatewayAPIPreview ApplicationLoadBalancerPreview; do
+            STATE=$(az feature show --namespace Microsoft.ContainerService --name "$FEATURE" --query properties.state -o tsv 2>/dev/null)
+            if [ "$STATE" = "Registered" ]; then
+              echo "  [OK] Preview feature $FEATURE registered"
+            else
+              echo "  [MISSING] Preview feature $FEATURE is '${STATE:-NotRegistered}' - required for the ingress gateway add-ons."
+              echo "            Run: az feature register --namespace Microsoft.ContainerService --name $FEATURE"
+              echo "            Then wait for it to report Registered and run: az provider register --namespace Microsoft.ContainerService"
+              echo "            Or set enable_ingress_gateway = false to deploy without them."
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+
+          for RP in Microsoft.NetworkFunction Microsoft.ServiceNetworking; do
+            STATE=$(az provider show --namespace "$RP" --query registrationState -o tsv 2>/dev/null)
+            if [ "$STATE" = "Registered" ]; then
+              echo "  [OK] Resource provider $RP registered"
+            else
+              echo "  [MISSING] Resource provider $RP is '${STATE:-NotRegistered}' - required for the ingress gateway add-ons."
+              echo "            Run: az provider register --namespace $RP"
+              echo "            Or set enable_ingress_gateway = false to deploy without them."
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+        fi
       else
         echo "  [MISSING] Azure not authenticated - run: az login"
         ERRORS=$((ERRORS + 1))

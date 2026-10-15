@@ -56,3 +56,9 @@ variable "alb_subnet_cidr" {
   description = "Address prefix for the Application Gateway for Containers association subnet. Must be a /24 or larger and not overlap other subnets. Only used when enable_ingress_gateway is true."
   default     = null
 }
+
+variable "route_table_id" {
+  type        = string
+  description = "ID of an existing route table to associate with the AKS subnet (for outbound_type = userDefinedRouting). Null leaves the subnet without a route table."
+  default     = null
+}

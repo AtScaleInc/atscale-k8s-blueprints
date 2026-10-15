@@ -36,6 +36,13 @@ variable "prefix" {
 variable "aad_admin_group_object_ids" {
   type        = list(string)
   description = "List of Azure AD Group Object IDs that will be cluster admins for AKS."
+  default     = []
+}
+
+variable "grant_deployer_cluster_admin" {
+  type        = bool
+  description = "Grant the identity running Terraform the Azure Kubernetes Service RBAC Cluster Admin role on the cluster."
+  default     = true
 }
 
 variable "default_node_pool_node_count" {
@@ -80,6 +87,12 @@ variable "dns_service_ip" {
   description = "IP address of the cluster DNS service. Must be inside service_cidr."
   type        = string
   default     = "10.0.0.10"
+}
+
+variable "outbound_type" {
+  description = "Cluster egress: loadBalancer, or userDefinedRouting when the node subnet has a route table sending 0.0.0.0/0 to a firewall/NVA."
+  type        = string
+  default     = "loadBalancer"
 }
 
 variable "alb_subnet_id" {

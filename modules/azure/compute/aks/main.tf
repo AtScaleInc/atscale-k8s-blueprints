@@ -31,7 +31,7 @@ resource "azurerm_log_analytics_workspace" "this" {
 }
 
 module "aks" {
-  source  = "Azure/avm-res-containerservice-managedcluster/azurerm"
+  source = "Azure/avm-res-containerservice-managedcluster/azurerm"
   # Pinned below 0.6.7 on purpose: that release added ingress_profile's
   # validation blocks with a coalesce(try(...)) bug that errors unconditionally
   # even when ingress_profile is left null (which we always do — see the
@@ -61,7 +61,7 @@ module "aks" {
     managed                = true
     enable_azure_rbac      = true
     tenant_id              = data.azurerm_client_config.current.tenant_id
-    admin_group_object_ids = var.aad_admin_group_object_ids
+    admin_group_object_ids = length(var.aad_admin_group_object_ids) > 0 ? var.aad_admin_group_object_ids : null
   }
 
   oidc_issuer_profile = {
@@ -91,7 +91,7 @@ module "aks" {
     network_plugin      = "azure"
     network_plugin_mode = "overlay"
     load_balancer_sku   = "standard"
-    outbound_type       = "loadBalancer"
+    outbound_type       = var.outbound_type
     pod_cidr            = var.pod_cidr
     service_cidr        = var.service_cidr
     dns_service_ip      = var.dns_service_ip
@@ -124,6 +124,17 @@ module "aks" {
     name = "Base"
     tier = "Free"
   }
+}
+
+# Make whoever runs Terraform a Kubernetes cluster-admin through Azure RBAC, so
+# the post-create in-cluster steps and the AtScale Helm install work without an
+# Entra ID admin group. The deployer already needs role-assignment rights for
+# the Network Contributor grants below, so this needs no extra permissions.
+resource "azurerm_role_assignment" "deployer_cluster_admin" {
+  count                = var.grant_deployer_cluster_admin ? 1 : 0
+  scope                = module.aks.resource_id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = data.azurerm_client_config.current.object_id
 }
 
 resource "azurerm_role_assignment" "aks_network_contributor_on_vnet" {

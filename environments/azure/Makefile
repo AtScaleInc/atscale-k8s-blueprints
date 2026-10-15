@@ -8,9 +8,17 @@ create-cluster:
 		echo ""; \
 		echo "=== Step 1: Configure Terraform Backend ==="; \
 		echo ""; \
-		read -p "Azure Subscription ID: " SUBSCRIPTION_ID; \
+		DEFAULT_SUBSCRIPTION_ID=$$(az account show --query id -o tsv 2>/dev/null); \
+		DEFAULT_SUBSCRIPTION_NAME=$$(az account show --query name -o tsv 2>/dev/null); \
+		if [ -n "$$DEFAULT_SUBSCRIPTION_ID" ]; then \
+			echo "  Current Azure subscription: $$DEFAULT_SUBSCRIPTION_NAME ($$DEFAULT_SUBSCRIPTION_ID)"; \
+			echo ""; \
+		fi; \
+		read -p "Azure Subscription ID [$$DEFAULT_SUBSCRIPTION_ID]: " SUBSCRIPTION_ID; \
+		SUBSCRIPTION_ID=$${SUBSCRIPTION_ID:-$$DEFAULT_SUBSCRIPTION_ID}; \
 		read -p "Resource group name for TF state: " RESOURCE_GROUP_NAME; \
-		read -p "Azure Region (e.g., eastus, westus3): " LOCATION; \
+		read -p "Azure Region [eastus]: " LOCATION; \
+		LOCATION=$${LOCATION:-eastus}; \
 		read -p "Storage account name (lowercase, alphanumeric): " STORAGE_ACCOUNT_NAME; \
 		read -p "Container name [tfstate]: " CONTAINER_NAME; \
 		CONTAINER_NAME=$${CONTAINER_NAME:-tfstate}; \
@@ -23,14 +31,55 @@ create-cluster:
 		echo "=== Step 2: Configure Environment ==="; \
 		echo ""; \
 		read -p "Environment name (e.g., dev, staging, prod): " ENV_NAME; \
-		read -p "Azure Region (e.g., eastus, westus3): " REGION; \
-		read -p "Resource group name: " RESOURCE_GROUP; \
-		read -p "VNet CIDR (e.g., 10.85.0.0/22): " VPC_CIDR; \
-		read -p "AAD admin group object ID: " AAD_GROUP; \
-		read -p "Kubernetes version [1.34]: " K8S_VERSION; \
-		K8S_VERSION=$${K8S_VERSION:-1.34}; \
-		read -p "Node VM size [Standard_D8s_v5]: " VM_SIZE; \
-		VM_SIZE=$${VM_SIZE:-Standard_D8s_v5}; \
+		DEFAULT_REGION=$${LOCATION:-eastus}; \
+		read -p "Azure Region [$$DEFAULT_REGION]: " REGION; \
+		REGION=$${REGION:-$$DEFAULT_REGION}; \
+		if [ -n "$$RESOURCE_GROUP_NAME" ]; then \
+			read -p "Resource group name [$$RESOURCE_GROUP_NAME]: " RESOURCE_GROUP; \
+			RESOURCE_GROUP=$${RESOURCE_GROUP:-$$RESOURCE_GROUP_NAME}; \
+		else \
+			read -p "Resource group name: " RESOURCE_GROUP; \
+		fi; \
+		echo ""; \
+		echo "  Minimal cluster: 1 node, no ingress gateway add-ons - for dev/test and POCs."; \
+		echo "  The VNet can then be as small as a /26."; \
+		read -p "Deploy minimal cluster? (true/false) [true]: " MINIMAL_CLUSTER; \
+		MINIMAL_CLUSTER=$${MINIMAL_CLUSTER:-true}; \
+		echo ""; \
+		if [ "$$MINIMAL_CLUSTER" = "true" ]; then \
+			echo "  Note: Minimal clusters require at least a Standard_D16s_v5 (16 vCPU / 64 GB)"; \
+			echo "        to run all AtScale components on a single node. Smaller sizes will likely fail."; \
+			echo ""; \
+			read -p "VNet CIDR, /26 or larger (e.g., 10.85.0.0/26): " VPC_CIDR; \
+			DEFAULT_VM_SIZE=Standard_D16s_v5; \
+		else \
+			read -p "VNet CIDR, /22 or larger with the ingress gateway (e.g., 10.85.0.0/22): " VPC_CIDR; \
+			DEFAULT_VM_SIZE=Standard_D8s_v5; \
+		fi; \
+		echo ""; \
+		echo "  Note: you (the identity running Terraform) are made cluster admin automatically."; \
+		echo "        Optionally add an Entra ID group so other people get admin access too."; \
+		echo ""; \
+		read -p "AAD admin group object ID (optional, Enter to skip): " AAD_GROUP; \
+		read -p "Kubernetes version [1.35]: " K8S_VERSION; \
+		K8S_VERSION=$${K8S_VERSION:-1.35}; \
+		read -p "Node VM size [$$DEFAULT_VM_SIZE]: " VM_SIZE; \
+		VM_SIZE=$${VM_SIZE:-$$DEFAULT_VM_SIZE}; \
+		NODE_COUNT=$$([ "$$MINIMAL_CLUSTER" = "true" ] && echo 1 || echo 3); \
+		while ! bash ./scripts/check-vm-quota.sh "$$REGION" "$$VM_SIZE" "$$NODE_COUNT" "$$SUBSCRIPTION_ID"; do \
+			read -p "Node VM size (Enter to keep $$VM_SIZE anyway): " NEW_VM_SIZE; \
+			[ -z "$$NEW_VM_SIZE" ] && break; \
+			VM_SIZE=$$NEW_VM_SIZE; \
+		done; \
+		echo ""; \
+		echo "  Note: pod and service ranges use no VNet addresses, but must not overlap the"; \
+		echo "        VNet, peered VNets, ExpressRoute/VPN or on-prem ranges, nor the AKS-reserved"; \
+		echo "        169.254.0.0/16, 192.0.2.0/24, 172.30.0.0/16 and 172.31.0.0/16."; \
+		echo ""; \
+		read -p "Pod CIDR (overlay, /24 per node) [10.244.0.0/16]: " POD_CIDR; \
+		POD_CIDR=$${POD_CIDR:-10.244.0.0/16}; \
+		read -p "Service CIDR (smaller than /12) [10.0.0.0/16]: " SERVICE_CIDR; \
+		SERVICE_CIDR=$${SERVICE_CIDR:-10.0.0.0/16}; \
 		echo ""; \
 		echo "  Note: AKS nodes run in private subnets."; \
 		echo "        You can choose whether the API server (kubectl endpoint) is public or private."; \
@@ -41,14 +90,17 @@ create-cluster:
 		if [ "$$PUBLIC_API" = "false" ]; then \
 			read -p "CIDR allowed to access the private API server (e.g., 10.0.0.0/8): " AUTHORIZED_CIDR; \
 		fi; \
-		echo ""; \
-		echo "  Note: the ingress gateway add-ons (Gateway API + Application Gateway"; \
-		echo "        for Containers) let the cluster serve ingress out of the box."; \
-		echo "        They are in PREVIEW and need preview features registered on the"; \
-		echo "        subscription - see the README prerequisites."; \
-		echo ""; \
-		read -p "Enable ingress gateway add-ons? (true/false) [true]: " ENABLE_INGRESS; \
-		ENABLE_INGRESS=$${ENABLE_INGRESS:-true}; \
+		ENABLE_INGRESS=false; \
+		if [ "$$MINIMAL_CLUSTER" != "true" ]; then \
+			echo ""; \
+			echo "  Note: the ingress gateway add-ons (Gateway API + Application Gateway"; \
+			echo "        for Containers) let the cluster serve ingress out of the box."; \
+			echo "        They are in PREVIEW and need preview features registered on the"; \
+			echo "        subscription - see the README prerequisites."; \
+			echo ""; \
+			read -p "Enable ingress gateway add-ons? (true/false) [true]: " ENABLE_INGRESS; \
+			ENABLE_INGRESS=$${ENABLE_INGRESS:-true}; \
+		fi; \
 		CREATE_ALB=false; \
 		if [ "$$ENABLE_INGRESS" = "true" ]; then \
 			echo ""; \
@@ -89,10 +141,12 @@ create-cluster:
 			echo "    Region:          $$REGION"; \
 			echo "    Resource group:  $$RESOURCE_GROUP"; \
 			echo "    VNet CIDR:       $$VPC_CIDR"; \
-			echo "    AAD group:       $$AAD_GROUP"; \
+			echo "    Cluster admins:  you (deployer)$$([ -n "$$AAD_GROUP" ] && echo " + AAD group $$AAD_GROUP")"; \
 			echo "    K8s version:     $$K8S_VERSION"; \
 			echo "    VM size:         $$VM_SIZE"; \
-			echo "    Node count:      3 (default)"; \
+			echo "    Node count:      $$([ "$$MINIMAL_CLUSTER" = "true" ] && echo "1 (minimal)" || echo "3 (default)")"; \
+			echo "    Pod CIDR:        $$POD_CIDR (overlay)"; \
+			echo "    Service CIDR:    $$SERVICE_CIDR"; \
 			echo "    Nodes:           always private (private subnets)"; \
 			echo "    API server:      $$([ "$$PUBLIC_API" = "false" ] && echo "private (CIDR: $$AUTHORIZED_CIDR)" || echo "public")"; \
 			echo "    Ingress gateway: $$([ "$$ENABLE_INGRESS" = "false" ] && echo "no" || echo "yes (Gateway API + ALB controller, preview)")"; \
@@ -126,13 +180,23 @@ create-cluster:
 			RESOURCE_GROUP_NAME=$$RESOURCE_GROUP_NAME LOCATION=$$LOCATION \
 				STORAGE_ACCOUNT_NAME=$$STORAGE_ACCOUNT_NAME CONTAINER_NAME=$$CONTAINER_NAME \
 				STATE_FILE_NAME=$$STATE_FILE_NAME SUBSCRIPTION_ID=$$SUBSCRIPTION_ID \
-				bash ./bootstrap/bootstrap-tf-backend.sh; \
+				bash ./bootstrap/bootstrap-tf-backend.sh || { \
+				echo ""; \
+				echo "ERROR: Terraform backend bootstrap failed. Nothing else was created."; \
+				echo "       If Azure reported an MFA error, sign in again completing MFA:"; \
+				echo "         az logout && az login --tenant $$(az account show --query tenantId -o tsv 2>/dev/null)"; \
+				echo "       then re-run: make create-cluster-azure"; \
+				exit 1; \
+			}; \
 		fi; \
 		if [ "$$NEED_TFVARS" = "true" ]; then \
 			echo 'environment                = "'$$ENV_NAME'"' > terraform.tfvars; \
 			echo 'region                     = "'$$REGION'"' >> terraform.tfvars; \
 			echo 'resource_group_name        = "'$$RESOURCE_GROUP'"' >> terraform.tfvars; \
 			echo 'vpc_cidr                   = "'$$VPC_CIDR'"' >> terraform.tfvars; \
+			echo 'minimal_cluster            = '$$MINIMAL_CLUSTER >> terraform.tfvars; \
+			echo 'pod_cidr                   = "'$$POD_CIDR'"' >> terraform.tfvars; \
+			echo 'service_cidr               = "'$$SERVICE_CIDR'"' >> terraform.tfvars; \
 			echo 'aad_admin_group_object_id  = "'$$AAD_GROUP'"' >> terraform.tfvars; \
 			echo 'aks_version                = "'$$K8S_VERSION'"' >> terraform.tfvars; \
 			echo 'aks_node_size              = "'$$VM_SIZE'"' >> terraform.tfvars; \
@@ -184,6 +248,7 @@ create-cluster:
 			--resource-group "$$(terraform output -raw resource_group_name)" \
 			--name "$$(terraform output -raw aks_name)" --overwrite-existing \
 		&& kubelogin convert-kubeconfig -l azurecli \
+		&& bash ./scripts/wait-for-cluster-admin.sh \
 		&& bash ./scripts/apply-storageclass-manifest.sh; then \
 		true; \
 	else \
@@ -192,6 +257,7 @@ create-cluster:
 		echo "         The cluster itself was created successfully. Retry with:"; \
 		echo "           az aks get-credentials --resource-group $$(terraform output -raw resource_group_name) --name $$(terraform output -raw aks_name)"; \
 		echo "           kubelogin convert-kubeconfig -l azurecli"; \
+		echo "           bash ./scripts/wait-for-cluster-admin.sh"; \
 		echo "           bash ./scripts/apply-storageclass-manifest.sh"; \
 	fi && \
 	if [ "$$(terraform output -raw create_default_alb 2>/dev/null)" = "true" ]; then \
