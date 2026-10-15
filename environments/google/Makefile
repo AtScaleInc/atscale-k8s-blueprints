@@ -61,6 +61,8 @@ create-cluster:
 		fi; \
 		read -p "Enable Cloud SQL PostgreSQL? (true/false) [false]: " ENABLE_DB; \
 		ENABLE_DB=$${ENABLE_DB:-false}; \
+		read -p "Enable Gateway API support? (true/false) [false]: " ENABLE_GATEWAY_API; \
+		ENABLE_GATEWAY_API=$${ENABLE_GATEWAY_API:-false}; \
 	fi; \
 	if [ "$$NEED_BACKEND" = "false" ] && [ "$$NEED_TFVARS" = "false" ]; then \
 		echo "Backend and configuration already exist, proceeding with deployment..."; \
@@ -110,6 +112,9 @@ create-cluster:
 				echo "    Enabled:         no"; \
 			fi; \
 			echo ""; \
+			echo "  Gateway API:"; \
+			echo "    Enabled:         $$ENABLE_GATEWAY_API"; \
+			echo ""; \
 		else \
 			echo "  Configuration: using existing terraform.tfvars"; \
 			echo ""; \
@@ -141,6 +146,7 @@ create-cluster:
 			echo 'public_api_server             = '$$PUBLIC_API >> terraform.tfvars; \
 			echo 'authorized_network_cidr       = "'$$AUTHORIZED_CIDR'"' >> terraform.tfvars; \
 			echo 'enable_postgres_database      = '$$ENABLE_DB >> terraform.tfvars; \
+			echo 'enable_gateway_api            = '$$ENABLE_GATEWAY_API >> terraform.tfvars; \
 			echo 'k8s_version                   = "'$$K8S_VERSION'"' >> terraform.tfvars; \
 			echo 'gke_instance_types            = ["'$$INSTANCE_TYPE'"]' >> terraform.tfvars; \
 			echo "terraform.tfvars generated."; \

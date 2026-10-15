@@ -102,3 +102,19 @@ variable "enable_private_cluster" {
   type        = bool
   default     = false
 }
+
+variable "enable_gateway_api" {
+  description = "Whether to enable Kubernetes Gateway API support (ALBGatewayAPI feature gate, CRDs, and a GatewayClass) on the AWS Load Balancer Controller"
+  type        = bool
+  default     = false
+}
+
+variable "gateway_scheme" {
+  description = "Scheme for the ALB provisioned by the Gateway API GatewayClass — \"internet-facing\" or \"internal\""
+  type        = string
+  default     = "internet-facing"
+  validation {
+    condition     = contains(["internet-facing", "internal"], var.gateway_scheme)
+    error_message = "gateway_scheme must be \"internet-facing\" or \"internal\"."
+  }
+}

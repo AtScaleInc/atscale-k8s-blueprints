@@ -59,6 +59,8 @@ module "eks" {
   eks_workers_desired_instance_count = var.minimal_cluster ? 1 : var.eks_workers_desired_instance_count
   vpc_access_cidr                    = [module.vpc.vpc_cidr]
   enable_private_cluster             = !var.public_api_server
+  enable_gateway_api                 = var.enable_gateway_api
+  gateway_scheme                     = var.gateway_scheme
   kms_admin_role                     = var.kms_admin_role
 
   aws_auth_sso_users = var.aws_auth_sso_users
