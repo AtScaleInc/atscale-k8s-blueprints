@@ -20,7 +20,9 @@ This blueprint creates an AKS (Azure Kubernetes Service) cluster on Azure with n
 4. **Make** - Pre-installed on macOS/Linux
 5. **kubectl** - [Install](https://kubernetes.io/docs/tasks/tools/)
 
-6. **Preview features for the ingress gateway add-ons** (only if `enable_ingress_gateway = true`, which is the default):
+6. **Azure permissions** - see [Required permissions](#required-permissions)
+
+7. **Preview features for the ingress gateway add-ons** (only with `minimal_cluster = false` and `enable_ingress_gateway = true`; not needed for the default minimal cluster):
 
 ```sh
 az feature register --namespace Microsoft.ContainerService --name ManagedGatewayAPIPreview
@@ -44,6 +46,25 @@ bash ../../scripts/check-prerequisites.sh azure
 The prerequisites script checks these registrations and fails with the exact
 commands to run if any are missing.
 
+### Required permissions
+
+The identity that runs `make create-cluster` (a user or a service principal) needs, on the
+subscription or on the target resource groups:
+
+| Role | Why |
+|------|-----|
+| **Contributor** | Creates the resource groups, VNet, Log Analytics, AKS, PostgreSQL and the Terraform state storage account, and registers resource providers |
+| **Role Based Access Control Administrator** | Creates the role assignments: `Network Contributor` for the cluster and ALB identities on their subnets, and `Azure Kubernetes Service RBAC Cluster Admin` for the deployer |
+
+`Owner` covers both, but grants more than is needed. To keep it least-privilege, add a
+condition to the Role Based Access Control Administrator assignment that allows only the
+`Network Contributor` and `Azure Kubernetes Service RBAC Cluster Admin` roles.
+
+Terraform makes the deployer a Kubernetes cluster-admin (`grant_deployer_cluster_admin = true`),
+which is what the post-create steps and the AtScale Helm install need (they create namespaces,
+CRDs, ClusterRoles and StorageClasses). An Entra ID admin group (`aad_admin_group_object_id`)
+is optional; set it to give other people admin access too.
+
 ## Quick Start
 
 ```sh
@@ -55,7 +76,7 @@ The Makefile guides you through the full deployment in two phases:
 
 **Phase 1 — Configuration (nothing is created yet):**
 1. Prompts for Terraform backend settings (Azure Storage Account for state)
-2. Prompts for cluster settings (environment, region, resource group, VNet CIDR, K8s version, VM size, API access, PostgreSQL)
+2. Prompts for cluster settings (environment, region, resource group, minimal cluster, VNet CIDR, K8s version, VM size, pod and service CIDRs, API access, ingress gateway, PostgreSQL)
 3. Displays a full deployment summary
 4. Asks: `Proceed with deployment? (yes/no)` — only on "yes" does anything happen
 
@@ -75,17 +96,24 @@ All configuration is managed through `terraform.tfvars`. The Makefile generates 
 |----------|-------------|---------|
 | `environment` | Environment name | `"dev"` |
 | `region` | Azure region | `"eastus"` |
-| `vpc_cidr` | VNet address space | `"10.85.0.0/22"` |
+| `vpc_cidr` | VNet address space (see [VNet sizing](#vnet-sizing)) | `"10.85.0.0/22"` |
 | `resource_group_name` | Azure resource group | `"rg-atscale-dev"` |
-| `aad_admin_group_object_id` | AAD admin group ID | `"12345-abcde-..."` |
 
 **Optional variables** (have sensible defaults):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `aks_version` | `"1.34"` | AKS Kubernetes version |
+| `aks_version` | `"1.35"` | AKS Kubernetes version |
+| `aad_admin_group_object_id` | `""` | Entra ID group whose members become cluster admins, in addition to the deployer |
+| `grant_deployer_cluster_admin` | `true` | Give the identity running Terraform the `Azure Kubernetes Service RBAC Cluster Admin` role on the cluster |
+| `minimal_cluster` | `true` | Deploy 1 node with no ingress gateway add-ons for dev/test and POCs. Overrides `aks_node_count`, `enable_ingress_gateway` and `create_default_alb`. Requires at least `Standard_D16s_v5` — see [Minimal cluster](#minimal-cluster) |
 | `aks_node_count` | `3` | Number of worker nodes |
 | `aks_node_size` | `"Standard_D8s_v5"` | VM size for nodes |
+| `pod_cidr` | `"10.244.0.0/16"` | Azure CNI Overlay pod range (no VNet addresses; a fixed `/24` per node) |
+| `service_cidr` | `"10.0.0.0/16"` | Kubernetes service range (smaller than `/12`) |
+| `dns_service_ip` | 10th address of `service_cidr` | Cluster DNS service IP |
+| `outbound_type` | `"loadBalancer"` | Cluster egress: `loadBalancer` or `userDefinedRouting` (see [Egress](#egress)) |
+| `route_table_id` | `null` | Existing route table to associate with the node subnet; required for `userDefinedRouting` |
 | `public_api_server` | `true` | Make the AKS API server publicly accessible |
 | `authorized_network_cidr` | `""` | CIDR allowed to reach the API server when `public_api_server = false` |
 | `enable_ingress_gateway` | `true` | Enable the Gateway API and Application Gateway for Containers add-ons (**preview** - see below) |
@@ -97,6 +125,39 @@ All configuration is managed through `terraform.tfvars`. The Makefile generates 
 | `postgresql_admin_username` | `"postgres"` | Database admin username |
 
 See `variables.tf` for the complete list of options.
+
+### VNet sizing
+
+The VNet is split into four equal subnets: PostgreSQL, AKS nodes, the Application Gateway for Containers association subnet, and one spare. Pods and services use the overlay ranges below, not VNet addresses, so the VNet only holds nodes, internal load balancer front ends and the private API server endpoint.
+
+| Setup | Minimum `vpc_cidr` | Node subnet |
+|---|---|---|
+| `minimal_cluster = true` (or `enable_ingress_gateway = false`) | `/26` | `/28` (11 usable after Azure's 5 reserved addresses) |
+| Production without the ingress gateway | `/25` | `/27` |
+| `enable_ingress_gateway = true` | `/22` | `/24` (the gateway subnet must be at least a `/24`) |
+
+`vpc_cidr` must be a network address (host bits zero). Terraform rejects invalid sizes at plan time.
+
+### Minimal cluster
+
+`minimal_cluster = true` deploys a single node and turns off the ingress gateway add-ons, so no preview features need registering and a `/26` VNet is enough. Expose AtScale through an internal Azure Load Balancer instead (the `service.beta.kubernetes.io/azure-load-balancer-internal: "true"` annotation on the AtScale proxy Service).
+
+- **Node size:** all AtScale components run on one node, so use at least `Standard_D16s_v5` (16 vCPU / 64 GB RAM). Smaller sizes will likely leave pods stuck in `Pending`. If your subscription has no DSv5 quota in the region, `Standard_D16s_v6` is the same shape; `make create-cluster` checks the vCPU quota for the size you pick and asks again if it is short.
+- **Availability zones:** unlike EKS, AKS needs no minimum number of zones. The node pool is regional (no zones set), which every region supports.
+- **Single system node:** the default node pool is the AKS system pool. Microsoft requires at least two system nodes (three recommended) for *production* clusters; one node is accepted but has no redundancy, so use minimal mode for dev/test and POCs only.
+- **Upgrades:** node upgrades surge one extra node, so allow vCPU quota for two nodes (32 vCPU of the DSv5 family for `Standard_D16s_v5`).
+- **Pricing tier:** the cluster uses the Free tier (no uptime SLA), which Microsoft recommends for dev/test clusters with fewer than 10 nodes.
+
+### Pod and service ranges
+
+- `pod_cidr` and `service_cidr` must not overlap the VNet, peered VNets, ExpressRoute/VPN or on-prem ranges reachable from the cluster. An external host inside `pod_cidr` becomes unreachable from pods.
+- AKS rejects the reserved ranges `169.254.0.0/16`, `192.0.2.0/24`, `172.30.0.0/16` and `172.31.0.0/16` (so `172.16.0.0/12` is not valid).
+- Use RFC 1918 or RFC 6598 (`100.64.0.0/10`) space for `pod_cidr`. Each node takes a fixed `/24`: a `/20` covers 16 nodes.
+- `service_cidr` must be smaller than a `/12`; a `/24` is plenty for AtScale. `dns_service_ip` must be inside it and not its first address.
+
+### Egress
+
+By default (`outbound_type = "loadBalancer"`) AKS creates a public IP for cluster egress. To send egress through your own firewall or NVA, set `outbound_type = "userDefinedRouting"` and `route_table_id` to an existing route table whose `0.0.0.0/0` route points to that firewall/NVA (not to `Internet`). The blueprint associates it with the node subnet before the cluster is created, which AKS validates.
 
 ## API Server Access
 

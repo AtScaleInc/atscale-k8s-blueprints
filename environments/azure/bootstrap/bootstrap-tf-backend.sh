@@ -31,6 +31,9 @@ if [[ -z "$SUBSCRIPTION_ID" ]]; then
   exit 1
 fi
 
+# Run every az command below against the chosen subscription, not just the CLI default.
+az account set --subscription "$SUBSCRIPTION_ID"
+
 # 1. Create resource group
 az group create --name $RESOURCE_GROUP_NAME --location $LOCATION
 

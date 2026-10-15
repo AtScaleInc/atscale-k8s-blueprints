@@ -20,7 +20,7 @@ output "alb_subnet_id" {
 }
 
 output "create_default_alb" {
-  value = var.create_default_alb
+  value = local.create_default_alb
 }
 
 ################################################################################

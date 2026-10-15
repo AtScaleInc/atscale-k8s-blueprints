@@ -25,6 +25,9 @@ output "postgresql_subnet_id" {
 output "aks_subnet_id" {
   description = "The ID of the AKS subnet."
   value       = azurerm_subnet.aks-subnet.id
+
+  # The cluster must not be created before the route table is associated.
+  depends_on = [azurerm_subnet_route_table_association.aks]
 }
 
 output "alb_subnet_id" {

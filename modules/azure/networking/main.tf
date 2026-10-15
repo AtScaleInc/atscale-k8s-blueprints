@@ -15,6 +15,14 @@ resource "azurerm_subnet" "aks-subnet" {
   address_prefixes     = [var.aks_subnet_cidr]
 }
 
+# With outbound_type = userDefinedRouting, AKS validates at cluster creation
+# that the node subnet already routes 0.0.0.0/0 to a gateway or NVA.
+resource "azurerm_subnet_route_table_association" "aks" {
+  count          = var.route_table_id != null ? 1 : 0
+  subnet_id      = azurerm_subnet.aks-subnet.id
+  route_table_id = var.route_table_id
+}
+
 
 # Dedicated subnet for the Application Gateway for Containers association.
 # Required by the ALB controller add-on: it must be delegated to
