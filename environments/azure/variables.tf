@@ -12,7 +12,7 @@ variable "environment" {
 }
 
 variable "vpc_cidr" {
-  description = "VNet address space CIDR (e.g., 10.85.0.0/22). Split into four equal subnets. Must be /22 or larger when the ingress gateway is enabled (its subnet needs a /24); /26 is enough otherwise (e.g., minimal_cluster = true)."
+  description = "VNet address space CIDR (e.g., 10.85.0.0/22), or with existing_vnet_name a free range inside that VNet for the blueprint's subnets. Split into four equal subnets. Must be /22 or larger when the ingress gateway is enabled (its subnet needs a /24); /26 is enough otherwise (e.g., minimal_cluster = true)."
   type        = string
   validation {
     condition     = can(cidrhost(var.vpc_cidr, 0))
@@ -47,6 +47,28 @@ variable "resource_group_name" {
   validation {
     condition     = length(var.resource_group_name) > 0
     error_message = "Resource group name cannot be empty."
+  }
+}
+
+variable "existing_vnet_name" {
+  description = "Name of an existing VNet to deploy into instead of creating one (e.g., a spoke VNet peered to your hub). The blueprint creates its subnets inside it, carved from vpc_cidr, which must then be a free range within the VNet's address space."
+  type        = string
+  default     = null
+}
+
+variable "existing_vnet_resource_group_name" {
+  description = "Resource group of the existing VNet, when it lives outside resource_group_name. Only used with existing_vnet_name."
+  type        = string
+  default     = null
+}
+
+variable "atscale_allowed_source_prefixes" {
+  description = "CIDRs or service tags allowed through the subnet NSGs to the AtScale ports (80/443, pgwire 15432). Defaults to VirtualNetwork, which covers peered VNets and VPN/ExpressRoute-connected ranges. Add client CIDRs (or \"Internet\") to reach a public load balancer."
+  type        = list(string)
+  default     = ["VirtualNetwork"]
+  validation {
+    condition     = length(var.atscale_allowed_source_prefixes) > 0 && length(var.atscale_allowed_source_prefixes) <= 100
+    error_message = "atscale_allowed_source_prefixes must have between 1 and 100 entries."
   }
 }
 
@@ -103,9 +125,9 @@ variable "authorized_network_cidr" {
 }
 
 variable "enable_ingress_gateway" {
-  description = "Provision the cluster ready to serve ingress via Gateway API, by enabling the AKS-managed Gateway API installation and the Application Gateway for Containers (ALB) controller add-on. Both are in PREVIEW and require subscription-level feature registration - see the README prerequisites before enabling."
+  description = "Opt in to serving ingress via Gateway API, by enabling the AKS-managed Gateway API installation and the Application Gateway for Containers (ALB) controller add-on. Both are in PREVIEW and require subscription-level feature registration - see the README prerequisites before enabling. Off by default so no preview feature is used unless asked for."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "create_default_alb" {

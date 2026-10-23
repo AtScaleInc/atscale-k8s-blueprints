@@ -10,6 +10,14 @@ output "resource_group_name" {
   value = var.resource_group_name
 }
 
+output "vnet_name" {
+  value = module.networking.vnet_name
+}
+
+output "vnet_resource_group_name" {
+  value = module.networking.vnet_resource_group_name
+}
+
 output "aks_name" {
   value = module.aks.aks_name
 }

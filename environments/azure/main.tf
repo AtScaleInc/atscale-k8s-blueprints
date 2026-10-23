@@ -44,6 +44,10 @@ module "networking" {
   enable_ingress_gateway = local.enable_ingress_gateway
   alb_subnet_cidr        = local.alb_subnet_cidr
   route_table_id         = var.route_table_id
+
+  existing_vnet_name                = var.existing_vnet_name
+  existing_vnet_resource_group_name = var.existing_vnet_resource_group_name
+  atscale_allowed_source_prefixes   = var.atscale_allowed_source_prefixes
 }
 
 
