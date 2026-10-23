@@ -4,11 +4,12 @@ This blueprint creates an AKS (Azure Kubernetes Service) cluster on Azure with n
 
 ## What Gets Created
 
-- Virtual Network (VNet) with subnets for AKS and optional PostgreSQL
+- Virtual Network (VNet) with subnets for AKS and optional PostgreSQL, or the same subnets inside an [existing VNet](#existing-vnet)
 - AKS cluster with RBAC and Azure AD integration (nodes always in private subnets)
 - Log Analytics workspace
-- Network Security Groups
-- Gateway API and Application Gateway for Containers add-ons, so the cluster can serve ingress out of the box (see [Ingress gateway](#ingress-gateway))
+- A Network Security Group on every subnet (see [Network security groups](#network-security-groups))
+- A hardened Azure Storage account for Terraform state (see [Terraform state backend](#terraform-state-backend))
+- Optional (preview, opt-in): Gateway API and Application Gateway for Containers add-ons (see [Ingress gateway](#ingress-gateway))
 - `azurefile-csi-nfs` StorageClass for ReadWriteMany (RWX) volumes (see [Storage](#storage))
 - Optional: Azure PostgreSQL Flexible Server with private networking
 
@@ -22,7 +23,7 @@ This blueprint creates an AKS (Azure Kubernetes Service) cluster on Azure with n
 
 6. **Azure permissions** - see [Required permissions](#required-permissions)
 
-7. **Preview features for the ingress gateway add-ons** (only with `minimal_cluster = false` and `enable_ingress_gateway = true`; not needed for the default minimal cluster):
+7. **Preview features for the ingress gateway add-ons** (only if you opt in with `minimal_cluster = false` and `enable_ingress_gateway = true`; not needed by default):
 
 ```sh
 az feature register --namespace Microsoft.ContainerService --name ManagedGatewayAPIPreview
@@ -53,12 +54,16 @@ subscription or on the target resource groups:
 
 | Role | Why |
 |------|-----|
-| **Contributor** | Creates the resource groups, VNet, Log Analytics, AKS, PostgreSQL and the Terraform state storage account, and registers resource providers |
-| **Role Based Access Control Administrator** | Creates the role assignments: `Network Contributor` for the cluster and ALB identities on their subnets, and `Azure Kubernetes Service RBAC Cluster Admin` for the deployer |
+| **Contributor** | Creates the resource groups, VNet, NSGs, Log Analytics, AKS, PostgreSQL and the Terraform state storage account, and registers resource providers |
+| **Role Based Access Control Administrator** | Creates the role assignments: `Network Contributor` for the cluster and ALB identities on their subnets, `Azure Kubernetes Service RBAC Cluster Admin` for the deployer, and `Storage Blob Data Contributor` for the deployer on the state storage account |
 
 `Owner` covers both, but grants more than is needed. To keep it least-privilege, add a
 condition to the Role Based Access Control Administrator assignment that allows only the
-`Network Contributor` and `Azure Kubernetes Service RBAC Cluster Admin` roles.
+`Network Contributor`, `Azure Kubernetes Service RBAC Cluster Admin` and `Storage Blob Data Contributor` roles.
+
+With an [existing VNet](#existing-vnet) in another resource group, the deployer also needs, on
+that VNet (or its resource group): `Network Contributor` to create the subnets, and Role Based
+Access Control Administrator to grant the cluster identities `Network Contributor` on them.
 
 Terraform makes the deployer a Kubernetes cluster-admin (`grant_deployer_cluster_admin = true`),
 which is what the post-create steps and the AtScale Helm install need (they create namespaces,
@@ -75,8 +80,8 @@ make create-cluster
 The Makefile guides you through the full deployment in two phases:
 
 **Phase 1 — Configuration (nothing is created yet):**
-1. Prompts for Terraform backend settings (Azure Storage Account for state)
-2. Prompts for cluster settings (environment, region, resource group, minimal cluster, VNet CIDR, K8s version, VM size, pod and service CIDRs, API access, ingress gateway, PostgreSQL)
+1. Prompts for Terraform backend settings (Azure Storage Account for state, and how its network access is locked down)
+2. Prompts for cluster settings (environment, region, resource group, existing VNet, minimal cluster, VNet CIDR, K8s version, VM size, pod and service CIDRs, API access, ingress gateway, PostgreSQL)
 3. Displays a full deployment summary
 4. Asks: `Proceed with deployment? (yes/no)` — only on "yes" does anything happen
 
@@ -96,7 +101,7 @@ All configuration is managed through `terraform.tfvars`. The Makefile generates 
 |----------|-------------|---------|
 | `environment` | Environment name | `"dev"` |
 | `region` | Azure region | `"eastus"` |
-| `vpc_cidr` | VNet address space (see [VNet sizing](#vnet-sizing)) | `"10.85.0.0/22"` |
+| `vpc_cidr` | VNet address space, or a free range inside an [existing VNet](#existing-vnet) (see [VNet sizing](#vnet-sizing)) | `"10.85.0.0/22"` |
 | `resource_group_name` | Azure resource group | `"rg-atscale-dev"` |
 
 **Optional variables** (have sensible defaults):
@@ -116,7 +121,10 @@ All configuration is managed through `terraform.tfvars`. The Makefile generates 
 | `route_table_id` | `null` | Existing route table to associate with the node subnet; required for `userDefinedRouting` |
 | `public_api_server` | `true` | Make the AKS API server publicly accessible |
 | `authorized_network_cidr` | `""` | CIDR allowed to reach the API server when `public_api_server = false` |
-| `enable_ingress_gateway` | `true` | Enable the Gateway API and Application Gateway for Containers add-ons (**preview** - see below) |
+| `enable_ingress_gateway` | `false` | Opt in to the Gateway API and Application Gateway for Containers add-ons (**preview** - see below) |
+| `existing_vnet_name` | `null` | Deploy into this existing VNet instead of creating one (see [Existing VNet](#existing-vnet)) |
+| `existing_vnet_resource_group_name` | `resource_group_name` | Resource group of the existing VNet |
+| `atscale_allowed_source_prefixes` | `["VirtualNetwork"]` | CIDRs or service tags allowed to reach the AtScale ports through the subnet NSGs (see [Network security groups](#network-security-groups)) |
 | `enable_postgresql` | `false` | Create PostgreSQL Flexible Server |
 | `postgresql_version` | `"16"` | PostgreSQL version |
 | `postgresql_sku_name` | `"GP_Standard_D4ads_v5"` | PostgreSQL SKU |
@@ -137,6 +145,51 @@ The VNet is split into four equal subnets: PostgreSQL, AKS nodes, the Applicatio
 | `enable_ingress_gateway = true` | `/22` | `/24` (the gateway subnet must be at least a `/24`) |
 
 `vpc_cidr` must be a network address (host bits zero). Terraform rejects invalid sizes at plan time.
+
+### Existing VNet
+
+Many organizations keep VNets in a separate network resource group owned by the cloud team, so
+the VNet can be peered to a hub. To deploy into such a VNet instead of creating one, set:
+
+```hcl
+existing_vnet_name                = "spoke-atscale-vnet"
+existing_vnet_resource_group_name = "rg-network"     # omit if it is resource_group_name
+vpc_cidr                          = "10.85.4.0/22"   # a free range inside that VNet
+```
+
+The blueprint does not modify the VNet itself (address space, DNS servers, peerings). It creates
+its subnets, and their NSGs and delegations, inside the VNet, carving them out of `vpc_cidr` as
+described above, so `vpc_cidr` must sit inside the VNet's address space and must not overlap any
+existing subnet. The subnets go in the VNet's resource group; the NSGs, AKS, PostgreSQL and its
+private DNS zone go in `resource_group_name`. See [Required permissions](#required-permissions)
+for what the deployer needs on the VNet.
+
+Hub connectivity (peering, custom DNS, and egress through a hub firewall with
+`outbound_type = "userDefinedRouting"` and `route_table_id`) stays under your control.
+
+### Network security groups
+
+Every subnet the blueprint creates gets an NSG, so it complies with the common
+"Subnets should be associated with a Network Security Group" policy:
+
+| Subnet | Allowed inbound (in addition to Azure's default rules) |
+|---|---|
+| AKS nodes | TCP `80`, `443` (AtScale UI/API through the proxy) and `15432` (pgwire) from `atscale_allowed_source_prefixes` |
+| PostgreSQL | TCP `5432` from `VirtualNetwork` |
+| Application Gateway for Containers (if enabled) | TCP `80` and `443` from `atscale_allowed_source_prefixes` |
+
+Azure's default rules still apply below these: traffic within the VNet (including peered VNets
+and VPN/ExpressRoute ranges) and Azure Load Balancer health probes are allowed, outbound traffic
+is allowed, and all other inbound traffic is denied. The subnet NSG sits in front of the NSG AKS
+manages on the node NICs, so a `LoadBalancer` Service is only reachable from sources allowed by
+both.
+
+`atscale_allowed_source_prefixes` defaults to `["VirtualNetwork"]`, which fits an internal load
+balancer. To reach AtScale through a public load balancer, add your client CIDRs (or `"Internet"`):
+
+```hcl
+atscale_allowed_source_prefixes = ["VirtualNetwork", "203.0.113.0/24"]
+```
 
 ### Minimal cluster
 
@@ -172,8 +225,14 @@ When setting `public_api_server = false`, set `authorized_network_cidr` to your 
 
 ## Ingress Gateway
 
-With `enable_ingress_gateway = true` (the default), the cluster is created with
-two add-ons so it can serve ingress without any further installation:
+The ingress gateway is **opt-in** and off by default: it relies on two AKS
+add-ons that are still in **preview**, and not every deployment uses Gateway
+API. Without it, expose AtScale through a `LoadBalancer` Service (internal or
+public) or your own ingress controller.
+
+With `enable_ingress_gateway = true` (and `minimal_cluster = false`), the cluster
+is created with two add-ons so it can serve ingress without any further
+installation:
 
 - **Managed Gateway API** - Azure installs and maintains the Gateway API CRDs.
 - **Application Gateway for Containers (ALB) controller** - translates Gateway
@@ -222,9 +281,7 @@ define the routing:
    delegated subnet - this provisions the Application Gateway for Containers in
    Azure. Find the subnet ID with:
    ```sh
-   az network vnet subnet show -g <resource_group> \
-     --vnet-name <environment>-aks-vnet --name <environment>-alb-subnet \
-     --query id -o tsv
+   terraform output -raw alb_subnet_id
    ```
 2. A `Gateway` (or `Ingress`) that references the provisioned resource by its
    `alb-id`. For an `Ingress`, the association annotation is
@@ -244,8 +301,53 @@ Both add-ons are currently **in preview**:
   ALB add-on is pinned in `alb_addon_api_version` so it can be moved forward
   without editing module code.
 
-To deploy without them, set `enable_ingress_gateway = false`. The cluster is
-then created exactly as before and you can install your own ingress controller.
+To deploy without them, leave `enable_ingress_gateway = false` (the default)
+and install your own ingress controller if you need one.
+
+## Terraform State Backend
+
+On first run, `make create-cluster` creates an Azure Storage account for Terraform state with
+`bootstrap/bootstrap-tf-backend.sh`. It is hardened by default:
+
+- No anonymous blob access, TLS 1.2 minimum, HTTPS only, no cross-tenant replication
+- **Shared key (account key) access disabled.** Terraform authenticates with Entra ID
+  (`use_azuread_auth = true` in the generated `backend.tf`), and the deployer is granted
+  `Storage Blob Data Contributor` on the account
+- Blob versioning plus soft delete for blobs and containers (7 days)
+- Network access in one of three modes, chosen at the prompt (or with `TFSTATE_NETWORK_ACCESS`):
+
+| Mode | Behavior |
+|---|---|
+| `public` (default) | Public endpoint reachable from any network. Every request still needs an Entra ID identity with a data role, because account keys and anonymous access are disabled |
+| `firewall` | Public endpoint behind a deny-by-default firewall that only allows the IP ranges you enter (comma-separated IPs/CIDRs, or `ALLOWED_IP_RANGES`). Press Enter to allow your detected public IP |
+| `private` | **Public network access disabled.** A private endpoint is created in an existing subnet you provide, optionally registered in your `privatelink.blob.core.windows.net` zone. Use this when policy requires PaaS public access to be disabled |
+
+In `firewall` mode, if you deploy from behind a VPN or secure web gateway (Cloudflare WARP,
+Zscaler, ...) whose egress IP changes between connections, allowing only the detected IP makes
+`terraform init` fail with `403 AuthorizationFailure`. Enter your organization's egress range
+instead (e.g. `198.51.100.0/24`), or disconnect the VPN/proxy while deploying. Add more ranges
+later with `az storage account network-rule add`.
+
+In `private` mode, Terraform must run from a network that can reach the private endpoint and
+resolve the account name to its private IP (for example, a self-hosted runner or jump box in a
+VNet peered to the endpoint's VNet), and the `privatelink.blob.core.windows.net` zone must be
+linked to that VNet. The private endpoint subnet must already exist, since the state is created
+before the cluster's VNet.
+
+To run the script directly:
+
+```sh
+RESOURCE_GROUP_NAME=rg-tfstate LOCATION=eastus STORAGE_ACCOUNT_NAME=atscaletfstate \
+SUBSCRIPTION_ID=<subscription_id> \
+TFSTATE_NETWORK_ACCESS=private \
+PRIVATE_ENDPOINT_SUBNET_ID=<subnet_id> \
+PRIVATE_DNS_ZONE_ID=<privatelink.blob.core.windows.net zone id> \
+  bash ./bootstrap/bootstrap-tf-backend.sh
+```
+
+**Bring your own backend:** if your organization already provides a state storage account,
+write `backend.tf` yourself (copy the one the script generates and change the `backend "azurerm"`
+values). `make create-cluster` skips the bootstrap whenever `backend.tf` exists.
 
 ## Storage
 
@@ -327,6 +429,10 @@ make delete-cluster
 ```
 
 Or manually: `terraform destroy`
+
+`make create-cluster` creates `resource_group_name` if it does not exist, outside Terraform, so
+the destroy leaves the (empty) resource group and the Terraform state storage in place. Remove
+them with `az group delete -n <name>` when no longer needed.
 
 ## Troubleshooting
 

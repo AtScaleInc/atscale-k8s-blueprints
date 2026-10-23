@@ -104,13 +104,13 @@ variable "alb_subnet_id" {
 variable "enable_gateway_api" {
   description = "Enable the AKS-managed Gateway API installation. Required by the Application Gateway for Containers ALB controller add-on. PREVIEW: requires the ManagedGatewayAPIPreview feature to be registered on the subscription."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_application_load_balancer" {
   description = "Enable the Application Gateway for Containers ALB controller add-on, so the cluster can serve ingress via Gateway API. Also turns on workload identity, which the add-on requires. PREVIEW: requires the ApplicationLoadBalancerPreview feature and the Microsoft.NetworkFunction / Microsoft.ServiceNetworking providers to be registered on the subscription."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "alb_addon_api_version" {

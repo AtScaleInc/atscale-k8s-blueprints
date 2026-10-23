@@ -123,13 +123,13 @@ case "$PROVIDER" in
           echo "         target resource groups - see 'Required permissions' in environments/azure/README.md."
         fi
 
-        # A minimal cluster (the default), or one with enable_ingress_gateway =
-        # false, never enables the preview add-ons, so their registrations are
-        # only needed when terraform.tfvars sets minimal_cluster = false.
+        # The preview add-ons are opt-in: their registrations are only needed
+        # when terraform.tfvars sets both minimal_cluster = false and
+        # enable_ingress_gateway = true.
         TFVARS="$(dirname "$0")/../environments/azure/terraform.tfvars"
         if ! grep -Eq '^[[:space:]]*minimal_cluster[[:space:]]*=[[:space:]]*false' "$TFVARS" 2>/dev/null \
-          || grep -Eq '^[[:space:]]*enable_ingress_gateway[[:space:]]*=[[:space:]]*false' "$TFVARS" 2>/dev/null; then
-          echo "  [SKIP] Ingress gateway preview features (not needed for a minimal cluster)"
+          || ! grep -Eq '^[[:space:]]*enable_ingress_gateway[[:space:]]*=[[:space:]]*true' "$TFVARS" 2>/dev/null; then
+          echo "  [SKIP] Ingress gateway preview features (ingress gateway not enabled)"
         else
           # The ingress gateway add-ons (Gateway API + Application Gateway for
           # Containers) are in preview. Without these registrations the cluster

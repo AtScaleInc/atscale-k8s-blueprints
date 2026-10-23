@@ -24,6 +24,26 @@ create-cluster:
 		CONTAINER_NAME=$${CONTAINER_NAME:-tfstate}; \
 		read -p "State file name [terraform.tfstate]: " STATE_FILE_NAME; \
 		STATE_FILE_NAME=$${STATE_FILE_NAME:-terraform.tfstate}; \
+		echo ""; \
+		echo "  Note: the state storage account is created without account keys or anonymous access,"; \
+		echo "        so every request needs your Entra ID identity. Network access can be:"; \
+		echo "          public   - reachable from any network (default)"; \
+		echo "          firewall - only from the IP ranges you allow"; \
+		echo "          private  - public access disabled; private endpoint in an existing subnet."; \
+		echo "                     Terraform must then run from a network that can reach it."; \
+		echo ""; \
+		read -p "State network access (public/firewall/private) [public]: " TFSTATE_NETWORK_ACCESS; \
+		TFSTATE_NETWORK_ACCESS=$${TFSTATE_NETWORK_ACCESS:-public}; \
+		PRIVATE_ENDPOINT_SUBNET_ID=""; \
+		PRIVATE_DNS_ZONE_ID=""; \
+		if [ "$$TFSTATE_NETWORK_ACCESS" = "firewall" ]; then \
+			read -p "Allowed IP ranges, comma-separated (Enter to detect your public IP) [$$ALLOWED_IP_RANGES]: " INPUT_IP_RANGES; \
+			ALLOWED_IP_RANGES=$${INPUT_IP_RANGES:-$$ALLOWED_IP_RANGES}; \
+		fi; \
+		if [ "$$TFSTATE_NETWORK_ACCESS" = "private" ]; then \
+			read -p "Private endpoint subnet ID: " PRIVATE_ENDPOINT_SUBNET_ID; \
+			read -p "privatelink.blob.core.windows.net zone ID (optional, Enter to skip): " PRIVATE_DNS_ZONE_ID; \
+		fi; \
 	fi; \
 	if [ ! -f terraform.tfvars ]; then \
 		NEED_TFVARS=true; \
@@ -41,6 +61,17 @@ create-cluster:
 			read -p "Resource group name: " RESOURCE_GROUP; \
 		fi; \
 		echo ""; \
+		echo "  Note: by default a new VNet is created in the resource group above."; \
+		echo "        To use an existing VNet (e.g., a spoke peered to your hub), enter its name;"; \
+		echo "        the blueprint then creates its subnets, from the VNet CIDR below, inside it."; \
+		echo ""; \
+		read -p "Existing VNet name (optional, Enter to create a new VNet): " EXISTING_VNET; \
+		EXISTING_VNET_RG=""; \
+		if [ -n "$$EXISTING_VNET" ]; then \
+			read -p "Existing VNet resource group [$$RESOURCE_GROUP]: " EXISTING_VNET_RG; \
+			EXISTING_VNET_RG=$${EXISTING_VNET_RG:-$$RESOURCE_GROUP}; \
+		fi; \
+		echo ""; \
 		echo "  Minimal cluster: 1 node, no ingress gateway add-ons - for dev/test and POCs."; \
 		echo "  The VNet can then be as small as a /26."; \
 		read -p "Deploy minimal cluster? (true/false) [true]: " MINIMAL_CLUSTER; \
@@ -50,10 +81,10 @@ create-cluster:
 			echo "  Note: Minimal clusters require at least a Standard_D16s_v5 (16 vCPU / 64 GB)"; \
 			echo "        to run all AtScale components on a single node. Smaller sizes will likely fail."; \
 			echo ""; \
-			read -p "VNet CIDR, /26 or larger (e.g., 10.85.0.0/26): " VPC_CIDR; \
+			read -p "VNet CIDR (free range in the VNet if existing), /26 or larger (e.g., 10.85.0.0/26): " VPC_CIDR; \
 			DEFAULT_VM_SIZE=Standard_D16s_v5; \
 		else \
-			read -p "VNet CIDR, /22 or larger with the ingress gateway (e.g., 10.85.0.0/22): " VPC_CIDR; \
+			read -p "VNet CIDR (free range in the VNet if existing), /22 or larger with the ingress gateway (e.g., 10.85.0.0/22): " VPC_CIDR; \
 			DEFAULT_VM_SIZE=Standard_D8s_v5; \
 		fi; \
 		echo ""; \
@@ -96,10 +127,11 @@ create-cluster:
 			echo "  Note: the ingress gateway add-ons (Gateway API + Application Gateway"; \
 			echo "        for Containers) let the cluster serve ingress out of the box."; \
 			echo "        They are in PREVIEW and need preview features registered on the"; \
-			echo "        subscription - see the README prerequisites."; \
+			echo "        subscription - see the README prerequisites. Leave them off if"; \
+			echo "        preview features are not allowed or you don't use Gateway API."; \
 			echo ""; \
-			read -p "Enable ingress gateway add-ons? (true/false) [true]: " ENABLE_INGRESS; \
-			ENABLE_INGRESS=$${ENABLE_INGRESS:-true}; \
+			read -p "Enable ingress gateway add-ons (preview)? (true/false) [false]: " ENABLE_INGRESS; \
+			ENABLE_INGRESS=$${ENABLE_INGRESS:-false}; \
 		fi; \
 		CREATE_ALB=false; \
 		if [ "$$ENABLE_INGRESS" = "true" ]; then \
@@ -130,6 +162,14 @@ create-cluster:
 			echo "    Storage account: $$STORAGE_ACCOUNT_NAME"; \
 			echo "    Container:       $$CONTAINER_NAME"; \
 			echo "    State file:      $$STATE_FILE_NAME"; \
+			if [ "$$TFSTATE_NETWORK_ACCESS" = "private" ]; then \
+				NETWORK_ACCESS_DESC="private endpoint (public access disabled)"; \
+			elif [ "$$TFSTATE_NETWORK_ACCESS" = "firewall" ]; then \
+				NETWORK_ACCESS_DESC="firewall ($${ALLOWED_IP_RANGES:-your detected public IP})"; \
+			else \
+				NETWORK_ACCESS_DESC="public (Entra ID auth required)"; \
+			fi; \
+			echo "    Network access:  $$NETWORK_ACCESS_DESC"; \
 			echo ""; \
 		else \
 			echo "  Terraform Backend: already configured"; \
@@ -140,6 +180,7 @@ create-cluster:
 			echo "    Environment:     $$ENV_NAME"; \
 			echo "    Region:          $$REGION"; \
 			echo "    Resource group:  $$RESOURCE_GROUP"; \
+			echo "    VNet:            $$([ -n "$$EXISTING_VNET" ] && echo "existing $$EXISTING_VNET (RG $$EXISTING_VNET_RG)" || echo "new")"; \
 			echo "    VNet CIDR:       $$VPC_CIDR"; \
 			echo "    Cluster admins:  you (deployer)$$([ -n "$$AAD_GROUP" ] && echo " + AAD group $$AAD_GROUP")"; \
 			echo "    K8s version:     $$K8S_VERSION"; \
@@ -180,6 +221,8 @@ create-cluster:
 			RESOURCE_GROUP_NAME=$$RESOURCE_GROUP_NAME LOCATION=$$LOCATION \
 				STORAGE_ACCOUNT_NAME=$$STORAGE_ACCOUNT_NAME CONTAINER_NAME=$$CONTAINER_NAME \
 				STATE_FILE_NAME=$$STATE_FILE_NAME SUBSCRIPTION_ID=$$SUBSCRIPTION_ID \
+				TFSTATE_NETWORK_ACCESS=$$TFSTATE_NETWORK_ACCESS ALLOWED_IP_RANGES=$$ALLOWED_IP_RANGES \
+				PRIVATE_ENDPOINT_SUBNET_ID=$$PRIVATE_ENDPOINT_SUBNET_ID PRIVATE_DNS_ZONE_ID=$$PRIVATE_DNS_ZONE_ID \
 				bash ./bootstrap/bootstrap-tf-backend.sh || { \
 				echo ""; \
 				echo "ERROR: Terraform backend bootstrap failed. Nothing else was created."; \
@@ -194,6 +237,10 @@ create-cluster:
 			echo 'region                     = "'$$REGION'"' >> terraform.tfvars; \
 			echo 'resource_group_name        = "'$$RESOURCE_GROUP'"' >> terraform.tfvars; \
 			echo 'vpc_cidr                   = "'$$VPC_CIDR'"' >> terraform.tfvars; \
+			if [ -n "$$EXISTING_VNET" ]; then \
+				echo 'existing_vnet_name                = "'$$EXISTING_VNET'"' >> terraform.tfvars; \
+				echo 'existing_vnet_resource_group_name = "'$$EXISTING_VNET_RG'"' >> terraform.tfvars; \
+			fi; \
 			echo 'minimal_cluster            = '$$MINIMAL_CLUSTER >> terraform.tfvars; \
 			echo 'pod_cidr                   = "'$$POD_CIDR'"' >> terraform.tfvars; \
 			echo 'service_cidr               = "'$$SERVICE_CIDR'"' >> terraform.tfvars; \
@@ -208,39 +255,72 @@ create-cluster:
 			echo "terraform.tfvars generated."; \
 		fi; \
 	fi; \
-	terraform init && \
-	echo "" && \
-	echo "============================================" && \
-	echo "  Generating Terraform plan (Networking)..." && \
-	echo "============================================" && \
-	echo "" && \
-	terraform plan -out=tfplan --target=module.networking && \
-	echo "" && \
+	CLUSTER_RG=$$(sed -n 's/^resource_group_name *= *"\(.*\)"/\1/p' terraform.tfvars); \
+	CLUSTER_REGION=$$(sed -n 's/^region *= *"\(.*\)"/\1/p' terraform.tfvars); \
+	if [ -n "$$CLUSTER_RG" ] && ! az group show --name "$$CLUSTER_RG" >/dev/null 2>&1; then \
+		echo "Creating resource group $$CLUSTER_RG in $$CLUSTER_REGION..."; \
+		az group create --name "$$CLUSTER_RG" --location "$$CLUSTER_REGION" -o none || exit 1; \
+	fi; \
+	terraform init || { \
+		echo ""; \
+		echo "ERROR: terraform init failed (see above). No cluster resources were created."; \
+		exit 1; \
+	}; \
+	echo ""; \
+	echo "============================================"; \
+	echo "  Generating Terraform plan (Networking)..."; \
+	echo "============================================"; \
+	echo ""; \
+	terraform plan -out=tfplan --target=module.networking || { \
+		rm -f tfplan; \
+		echo ""; \
+		echo "ERROR: the networking plan failed (see above). No cluster resources were created."; \
+		exit 1; \
+	}; \
+	echo ""; \
 	read -p "Apply networking resources? (yes/no): " APPLY_NET; \
 	if [ "$$APPLY_NET" != "yes" ]; then \
 		rm -f tfplan; \
 		echo "Cancelled. No resources were created."; \
 		exit 0; \
 	fi; \
-	terraform apply tfplan && \
-	rm -f tfplan && \
-	echo "" && \
-	echo "============================================" && \
-	echo "  Generating Terraform plan (full)..." && \
-	echo "============================================" && \
-	echo "" && \
-	terraform plan -out=tfplan && \
-	echo "" && \
+	terraform apply tfplan || { \
+		rm -f tfplan; \
+		echo ""; \
+		echo "ERROR: applying the networking resources failed (see above). Some may have been"; \
+		echo "       created; fix the error and re-run make create-cluster-azure to continue."; \
+		exit 1; \
+	}; \
+	rm -f tfplan; \
+	echo ""; \
+	echo "============================================"; \
+	echo "  Generating Terraform plan (full)..."; \
+	echo "============================================"; \
+	echo ""; \
+	terraform plan -out=tfplan || { \
+		rm -f tfplan; \
+		echo ""; \
+		echo "ERROR: the full plan failed (see above). Networking was created but AKS/PostgreSQL"; \
+		echo "       were not; fix the error and re-run make create-cluster-azure to continue."; \
+		exit 1; \
+	}; \
+	echo ""; \
 	read -p "Apply this plan and create all resources? (yes/no): " APPLY_CONFIRM; \
 	if [ "$$APPLY_CONFIRM" != "yes" ]; then \
 		rm -f tfplan; \
 		echo "Cancelled. Networking was created but AKS/PostgreSQL were not."; \
 		exit 0; \
 	fi; \
-	terraform apply tfplan && \
-	rm -f tfplan && \
-	echo "" && \
-	echo "============================================" && \
+	terraform apply tfplan || { \
+		rm -f tfplan; \
+		echo ""; \
+		echo "ERROR: creating the cluster resources failed (see above). Some may have been"; \
+		echo "       created; fix the error and re-run make create-cluster-azure to continue."; \
+		exit 1; \
+	}; \
+	rm -f tfplan; \
+	echo ""; \
+	echo "============================================"; \
 	echo "  Configuring Azure Files StorageClass for RWX volumes..." && \
 	echo "============================================" && \
 	echo "" && \
