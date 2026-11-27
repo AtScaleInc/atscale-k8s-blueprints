@@ -1,7 +1,15 @@
 .PHONY: create-cluster delete-cluster plan
 
 create-cluster:
-	@NEED_BACKEND=false; \
+	@normalize_bool() { \
+		case "$$1" in \
+			true|false) echo "$$1" ;; \
+			[Yy]|[Yy][Ee][Ss]) echo true ;; \
+			[Nn]|[Nn][Oo]) echo false ;; \
+			*) echo "$$1" ;; \
+		esac; \
+	}; \
+	NEED_BACKEND=false; \
 	NEED_TFVARS=false; \
 	if [ ! -f backend.tf ]; then \
 		NEED_BACKEND=true; \
@@ -32,6 +40,7 @@ create-cluster:
 		echo "  Minimal cluster: 2 subnets (2 AZs) and 1 node — ideal for dev/test cost savings."; \
 		read -p "Deploy minimal cluster? (true/false) [false]: " MINIMAL_CLUSTER; \
 		MINIMAL_CLUSTER=$${MINIMAL_CLUSTER:-false}; \
+		MINIMAL_CLUSTER=$$(normalize_bool "$$MINIMAL_CLUSTER"); \
 		echo ""; \
 		if [ "$$MINIMAL_CLUSTER" = "true" ]; then \
 			echo "  Note: Minimal clusters require at least an m6a.4xlarge instance to run all"; \
@@ -49,6 +58,7 @@ create-cluster:
 		echo ""; \
 		read -p "Make API server publicly accessible? (true/false) [true]: " PUBLIC_API; \
 		PUBLIC_API=$${PUBLIC_API:-true}; \
+		PUBLIC_API=$$(normalize_bool "$$PUBLIC_API"); \
 		if [ "$$PUBLIC_API" = "false" ]; then \
 			echo ""; \
 			echo "  NOTE: Private clusters use a two-phase deployment:"; \
@@ -61,8 +71,10 @@ create-cluster:
 		fi; \
 		read -p "Enable RDS PostgreSQL? (true/false) [false]: " ENABLE_RDS; \
 		ENABLE_RDS=$${ENABLE_RDS:-false}; \
+		ENABLE_RDS=$$(normalize_bool "$$ENABLE_RDS"); \
 		read -p "Enable ingress gateway add-ons? (true/false) [false]: " ENABLE_GATEWAY_API; \
 		ENABLE_GATEWAY_API=$${ENABLE_GATEWAY_API:-false}; \
+		ENABLE_GATEWAY_API=$$(normalize_bool "$$ENABLE_GATEWAY_API"); \
 		read -p "Gateway load balancer scheme (internet-facing/internal) [internet-facing]: " GATEWAY_SCHEME; \
 		GATEWAY_SCHEME=$${GATEWAY_SCHEME:-internet-facing}; \
 	fi; \
