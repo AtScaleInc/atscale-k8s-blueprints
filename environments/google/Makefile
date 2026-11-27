@@ -1,7 +1,15 @@
 .PHONY: create-cluster delete-cluster plan
 
 create-cluster:
-	@NEED_BACKEND=false; \
+	@normalize_bool() { \
+		case "$$1" in \
+			true|false) echo "$$1" ;; \
+			[Yy]|[Yy][Ee][Ss]) echo true ;; \
+			[Nn]|[Nn][Oo]) echo false ;; \
+			*) echo "$$1" ;; \
+		esac; \
+	}; \
+	NEED_BACKEND=false; \
 	NEED_TFVARS=false; \
 	if [ ! -f backend.tf ]; then \
 		NEED_BACKEND=true; \
@@ -47,6 +55,7 @@ create-cluster:
 		echo ""; \
 		read -p "Make API server publicly accessible? (true/false) [true]: " PUBLIC_API; \
 		PUBLIC_API=$${PUBLIC_API:-true}; \
+		PUBLIC_API=$$(normalize_bool "$$PUBLIC_API"); \
 		AUTHORIZED_CIDR=""; \
 		if [ "$$PUBLIC_API" = "false" ]; then \
 			echo ""; \
@@ -61,8 +70,10 @@ create-cluster:
 		fi; \
 		read -p "Enable Cloud SQL PostgreSQL? (true/false) [false]: " ENABLE_DB; \
 		ENABLE_DB=$${ENABLE_DB:-false}; \
+		ENABLE_DB=$$(normalize_bool "$$ENABLE_DB"); \
 		read -p "Enable Gateway API support? (true/false) [false]: " ENABLE_GATEWAY_API; \
 		ENABLE_GATEWAY_API=$${ENABLE_GATEWAY_API:-false}; \
+		ENABLE_GATEWAY_API=$$(normalize_bool "$$ENABLE_GATEWAY_API"); \
 	fi; \
 	if [ "$$NEED_BACKEND" = "false" ] && [ "$$NEED_TFVARS" = "false" ]; then \
 		echo "Backend and configuration already exist, proceeding with deployment..."; \

@@ -1,7 +1,15 @@
 .PHONY: create-cluster delete-cluster plan
 
 create-cluster:
-	@NEED_BACKEND=false; \
+	@normalize_bool() { \
+		case "$$1" in \
+			true|false) echo "$$1" ;; \
+			[Yy]|[Yy][Ee][Ss]) echo true ;; \
+			[Nn]|[Nn][Oo]) echo false ;; \
+			*) echo "$$1" ;; \
+		esac; \
+	}; \
+	NEED_BACKEND=false; \
 	NEED_TFVARS=false; \
 	if [ ! -f backend.tf ]; then \
 		NEED_BACKEND=true; \
@@ -76,6 +84,7 @@ create-cluster:
 		echo "  The VNet can then be as small as a /26."; \
 		read -p "Deploy minimal cluster? (true/false) [true]: " MINIMAL_CLUSTER; \
 		MINIMAL_CLUSTER=$${MINIMAL_CLUSTER:-true}; \
+		MINIMAL_CLUSTER=$$(normalize_bool "$$MINIMAL_CLUSTER"); \
 		echo ""; \
 		if [ "$$MINIMAL_CLUSTER" = "true" ]; then \
 			echo "  Note: Minimal clusters require at least a Standard_D16s_v5 (16 vCPU / 64 GB)"; \
@@ -117,6 +126,7 @@ create-cluster:
 		echo ""; \
 		read -p "Make API server publicly accessible? (true/false) [true]: " PUBLIC_API; \
 		PUBLIC_API=$${PUBLIC_API:-true}; \
+		PUBLIC_API=$$(normalize_bool "$$PUBLIC_API"); \
 		AUTHORIZED_CIDR=""; \
 		if [ "$$PUBLIC_API" = "false" ]; then \
 			read -p "CIDR allowed to access the private API server (e.g., 10.0.0.0/8): " AUTHORIZED_CIDR; \
@@ -132,6 +142,7 @@ create-cluster:
 			echo ""; \
 			read -p "Enable ingress gateway add-ons (preview)? (true/false) [false]: " ENABLE_INGRESS; \
 			ENABLE_INGRESS=$${ENABLE_INGRESS:-false}; \
+			ENABLE_INGRESS=$$(normalize_bool "$$ENABLE_INGRESS"); \
 		fi; \
 		CREATE_ALB=false; \
 		if [ "$$ENABLE_INGRESS" = "true" ]; then \
@@ -142,9 +153,11 @@ create-cluster:
 			echo ""; \
 			read -p "Create a default Application Gateway for Containers? (true/false) [false]: " CREATE_ALB; \
 			CREATE_ALB=$${CREATE_ALB:-false}; \
+			CREATE_ALB=$$(normalize_bool "$$CREATE_ALB"); \
 		fi; \
 		read -p "Enable PostgreSQL? (true/false) [false]: " ENABLE_PG; \
 		ENABLE_PG=$${ENABLE_PG:-false}; \
+		ENABLE_PG=$$(normalize_bool "$$ENABLE_PG"); \
 	fi; \
 	if [ "$$NEED_BACKEND" = "false" ] && [ "$$NEED_TFVARS" = "false" ]; then \
 		echo "Backend and configuration already exist, proceeding with deployment..."; \
